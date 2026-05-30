@@ -1,0 +1,46 @@
+{
+  "name": "app",
+  "version": "1.0.0",
+  "description": "A secure CLI tool to extract MongoDB schema blueprints without exporting real data.",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/cli.js",
+    "test": "vitest run"
+  },
+  "bin": {
+    "mongo-schema-fetch": "./dist/cli.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JMartynov/mongo-schema-fetch.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/JMartynov/mongo-schema-fetch/issues"
+  },
+  "homepage": "https://github.com/JMartynov/mongo-schema-fetch#readme",
+  "dependencies": {
+    "ajv": "^8.20.0",
+    "commander": "^15.0.0",
+    "mongodb": "^7.2.0",
+    "mongodb-schema": "^12.7.0",
+    "open": "^11.0.0",
+    "prompts": "^2.4.2"
+  },
+  "devDependencies": {
+    "@testcontainers/mongodb": "^12.0.1",
+    "@types/node": "^25.9.1",
+    "@types/prompts": "^2.4.9",
+    "testcontainers": "^12.0.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.7"
+  }
+}
