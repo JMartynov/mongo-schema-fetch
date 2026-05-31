@@ -1,0 +1,28 @@
+import { describe, it, expect } from 'vitest';
+import { Command } from 'commander';
+
+// We just test the CLI parsing logic directly to ensure commander behaves correctly
+describe('CLI Unit tests (Argument parsing)', () => {
+    it('should parse basic options', () => {
+        const program = new Command();
+        program
+          .argument('<uri>', 'MongoDB Connection URI')
+          .option('--db <name>')
+          .option('--collections <list>')
+          .option('--all-collections')
+          .option('--out <path>', 'Output file path', 'schema-payload.json')
+          .option('--sample <number>', 'Custom sample limit', parseInt)
+          .option('--enum-threshold <number>', 'Threshold', parseInt, 20)
+          .option('--read-preference <mode>')
+          .option('--quiet')
+          .action(() => {}); // prevent execution
+
+        program.parse(['node', 'cli.js', 'mongodb://localhost', '--db', 'test', '--read-preference', 'secondary']);
+
+        const opts = program.opts();
+        expect(opts.db).toBe('test');
+        expect(opts.readPreference).toBe('secondary');
+        expect(opts.out).toBe('schema-payload.json');
+        expect(opts.enumThreshold).toBe(20);
+    });
+});
