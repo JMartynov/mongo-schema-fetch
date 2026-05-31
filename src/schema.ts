@@ -1,6 +1,7 @@
 import { Db } from 'mongodb';
 // @ts-ignore
 import mongodbSchema from 'mongodb-schema';
+import { Readable } from 'stream';
 
 export async function inferSchema(db: Db, collectionName: string, avgObjSize: number, customSampleLimit?: number, enumThreshold = 20): Promise<any> {
   const coll = db.collection(collectionName);
@@ -20,18 +21,21 @@ export async function inferSchema(db: Db, collectionName: string, avgObjSize: nu
   // Use pipeline instead of directly fetching all into memory
   const count = await coll.estimatedDocumentCount().catch(() => 0);
 
-  let stream;
+  let cursor;
   if (count <= limit) {
     // Small collection, fetch all, maxTimeMS avoids long hangs
-    stream = coll.find().maxTimeMS(5000).stream();
+    cursor = coll.find({}, { maxTimeMS: 5000 });
   } else {
     // $sample pipeline
-    stream = coll.aggregate([{ $sample: { size: limit } }]).maxTimeMS(5000).stream();
+    cursor = coll.aggregate([{ $sample: { size: limit } }], { maxTimeMS: 5000 });
   }
+
+  // mongodb-schema strictly expects a node Readable Stream
+  const readableStream = Readable.from(cursor);
 
   try {
     const parser = (mongodbSchema as any).default || mongodbSchema;
-    const schema = await parser(stream, { semanticTypes: true });
+    const schema = await parser(readableStream, { semanticTypes: true });
     return cleanSchema(schema, enumThreshold);
   } catch (err: any) {
     throw err;
@@ -45,42 +49,45 @@ export function cleanSchema(schema: any, enumThreshold: number): any {
   const cleaned = JSON.parse(JSON.stringify(schema));
 
   // Recursively clean fields
-  function traverse(obj: any) {
+  function traverse(obj: any, parentType?: string) {
     if (Array.isArray(obj)) {
-      obj.forEach(traverse);
+      obj.forEach(item => traverse(item, parentType));
     } else if (obj !== null && typeof obj === 'object') {
-      if (obj.name && obj.type && obj.probability !== undefined) {
-          // This looks like a field definition.
-          // Process unique values / enums if it's String or Number
-          if (obj.values) {
-              if (obj.type === 'String' || obj.type === 'Number') {
-                  const uniqueValues = obj.values;
-                  if (uniqueValues.length > 0 && uniqueValues.length < enumThreshold) {
-                      // We only keep string values if they are short (< 100 chars)
-                      obj.enumValues = uniqueValues.filter((v: any) => {
-                          if (typeof v === 'string') return v.length <= 100;
-                          return true;
-                      });
-                  }
+
+      // Determine the type we are dealing with. It's either on the field itself, or on the type descriptor inside `types`
+      const currentType = obj.type || obj.name || parentType;
+
+      if (obj.values && Array.isArray(obj.values)) {
+          // We found a values array. Check if we should save it as an enum
+          if (currentType === 'String' || currentType === 'Number') {
+              const uniqueValues = obj.values;
+              if (uniqueValues.length > 0 && uniqueValues.length < enumThreshold) {
+                  // We only keep string values if they are short (< 100 chars)
+                  obj.enumValues = uniqueValues.filter((v: any) => {
+                      if (typeof v === 'string') return v.length <= 100;
+                      return true;
+                  });
               }
-              // ALWAYS remove raw values to avoid data leak for ALL types
-              delete obj.values;
           }
+          // ALWAYS remove raw values to avoid data leak for ALL types
+          delete obj.values;
       }
 
-      // Remove types array values to be safe if present
+      // If we are looking at a field definition, pass its type down to the types array
+      const fieldType = obj.type || parentType;
+
       if (obj.types && Array.isArray(obj.types)) {
-          obj.types.forEach(traverse);
+          obj.types.forEach((t: any) => traverse(t, fieldType));
       }
 
-      if (obj.fields) {
+      if (obj.fields && Array.isArray(obj.fields)) {
         // Arrays or SubDocuments
-        obj.fields.forEach(traverse);
+        obj.fields.forEach((f: any) => traverse(f));
       }
 
       for (const key in obj) {
         if (key !== 'fields' && key !== 'types') {
-            traverse(obj[key]);
+            traverse(obj[key], fieldType);
         }
       }
     }

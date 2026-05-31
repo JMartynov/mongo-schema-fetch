@@ -21,11 +21,12 @@ program
   .option('--out <path>', 'Output file path', 'schema-payload.json')
   .option('--sample <number>', 'Custom sample limit for schema inference', parseInt)
   .option('--enum-threshold <number>', 'Threshold for saving enum values', parseInt, 20)
+  .option('--read-preference <mode>', 'Read preference for Replica Sets (e.g. secondary)')
   .option('--quiet', 'Disable all interactive prompts (CI/CD mode)')
   .action(async (uri, options) => {
     let client;
     try {
-      const dbConnection = await connectToDb(uri);
+      const dbConnection = await connectToDb(uri, options.readPreference);
       client = dbConnection.client;
       let db = dbConnection.db;
 
@@ -90,7 +91,10 @@ program
       const jsonContent = JSON.stringify(payload, null, 2);
       fs.writeFileSync(outPath, jsonContent, 'utf-8');
 
-      if (!options.quiet) {
+      // Detect if --out was explicitly provided rather than defaulting
+      const outWasExplicit = process.argv.includes('--out') || process.argv.some(arg => arg.startsWith('--out='));
+
+      if (!options.quiet && !outWasExplicit) {
         const stats = fs.statSync(outPath);
         const sizeKb = stats.size / 1024;
         await promptAndUploadMagicLink(outPath, sizeKb);

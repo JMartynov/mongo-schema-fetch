@@ -1,8 +1,14 @@
 import { MongoClient, Db } from 'mongodb';
 import { ServerContext, CollectionStats, CollectionIndexes } from './types.js';
 
-export async function connectToDb(uri: string): Promise<{ client: MongoClient; db: Db }> {
-  const client = new MongoClient(uri);
+import { ReadPreferenceMode } from 'mongodb';
+
+export async function connectToDb(uri: string, readPreference?: string): Promise<{ client: MongoClient; db: Db }> {
+  const options: any = {};
+  if (readPreference) {
+    options.readPreference = readPreference as ReadPreferenceMode;
+  }
+  const client = new MongoClient(uri, options);
   await client.connect();
   const db = client.db();
   return { client, db };
