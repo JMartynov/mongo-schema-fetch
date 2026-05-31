@@ -5,7 +5,7 @@ import { connectToDb, fetchServerContext, getCollectionNames, fetchCollectionSta
 import { inferSchema } from './schema.js';
 import { validatePayload } from './validation.js';
 import { promptForCollections } from './interactive.js';
-import { promptAndUploadMagicLink } from './upload.js';
+import { promptAndUploadMagicLink, autoAnalyze } from './upload.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -23,7 +23,13 @@ program
   .option('--enum-threshold <number>', 'Threshold for saving enum values', parseInt, 20)
   .option('--read-preference <mode>', 'Read preference for Replica Sets (e.g. secondary)')
   .option('--quiet', 'Disable all interactive prompts (CI/CD mode)')
+  .option('--query-file <path>', 'Path to a JSON file containing the query to analyze')
+  .option('--auto-analyze', 'Automatically send the schema and query to the API and exit based on results')
   .action(async (uri, options) => {
+    if (options.autoAnalyze && !options.queryFile) {
+      console.error("❌ Error: --query-file must be provided when using --auto-analyze");
+      process.exit(1);
+    }
     let client;
     try {
       const dbConnection = await connectToDb(uri, options.readPreference);
@@ -94,7 +100,13 @@ program
       // Detect if --out was explicitly provided rather than defaulting
       const outWasExplicit = process.argv.includes('--out') || process.argv.some(arg => arg.startsWith('--out='));
 
-      if (!options.quiet && !outWasExplicit) {
+      if (options.autoAnalyze) {
+         console.log(`\n✅ File saved to ${outPath}`);
+         const success = await autoAnalyze(outPath, options.queryFile);
+         if (!success) {
+            process.exit(1);
+         }
+      } else if (!options.quiet && !outWasExplicit) {
         const stats = fs.statSync(outPath);
         const sizeKb = stats.size / 1024;
         await promptAndUploadMagicLink(outPath, sizeKb);
