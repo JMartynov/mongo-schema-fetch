@@ -301,7 +301,7 @@ An array of objects, one for each scanned collection. Each object contains:
 
 ## Testing
 
-This project includes a comprehensive test suite covering unit operations, CLI parsing, and real database integration tests using Docker containers.
+This project includes a comprehensive test suite covering unit operations, CLI parsing, and real database integration tests using Docker containers. For a full mapping of core use cases to testing suites, see the [TEST_CASES.md](file:///Users/ivan/Project/3t.tools.intellij/mongo/mongo-schema-fetch/TEST_CASES.md) document.
 
 ### 1. Unit & Integration Tests (Vitest)
 Unit and mock database integration tests are written in Vitest. They ensure core logic, error handling, parameter parsing, and schema cleaning function correctly.
