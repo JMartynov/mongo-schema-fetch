@@ -101,6 +101,36 @@ export async function fetchCollectionStats(db: Db, collectionName: string): Prom
   };
 }
 
+const hostMap = new Map<string, string>();
+let hostCounter = 1;
+
+export function clearHostMap(): void {
+  hostMap.clear();
+  hostCounter = 1;
+}
+
+export function sanitizeHost(hostStr: string): string {
+  if (!hostStr) return hostStr;
+
+  const lastColonIndex = hostStr.lastIndexOf(':');
+  let hostPart = hostStr;
+  let portPart = '';
+
+  if (lastColonIndex !== -1 && lastColonIndex > hostStr.lastIndexOf(']')) {
+    hostPart = hostStr.substring(0, lastColonIndex);
+    portPart = hostStr.substring(lastColonIndex);
+  }
+
+  const cleanHostPart = hostPart.replace(/^\[|\]$/g, '');
+
+  if (!hostMap.has(cleanHostPart)) {
+    hostMap.set(cleanHostPart, `node_${hostCounter++}`);
+  }
+
+  const symbolicHost = hostMap.get(cleanHostPart)!;
+  return portPart ? `${symbolicHost}${portPart}` : symbolicHost;
+}
+
 export async function fetchCollectionIndexes(db: Db, collectionName: string): Promise<CollectionIndexes> {
   const coll = db.collection(collectionName);
 
@@ -114,6 +144,11 @@ export async function fetchCollectionIndexes(db: Db, collectionName: string): Pr
   let indexStats: any[] = [];
   try {
     indexStats = await coll.aggregate([{ $indexStats: {} }]).toArray();
+    for (const stat of indexStats) {
+      if (typeof stat.host === 'string') {
+        stat.host = sanitizeHost(stat.host);
+      }
+    }
   } catch (err: any) {
     console.warn(`⚠️ Could not fetch $indexStats for ${collectionName}.`, err.message);
   }

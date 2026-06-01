@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
-import { fetchServerContext, getCollectionNames, fetchCollectionStats, fetchCollectionIndexes } from '../src/db.js';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { fetchServerContext, getCollectionNames, fetchCollectionStats, fetchCollectionIndexes, clearHostMap } from '../src/db.js';
 
 describe('DB Operations (Mocked)', () => {
     it('fetchServerContext should handle permissions errors gracefully', async () => {
@@ -93,6 +93,10 @@ describe('DB Operations (Mocked)', () => {
         expect(stats.totalIndexSize).toBe(0);
     });
 
+    beforeEach(() => {
+        clearHostMap();
+    });
+
     it('fetchCollectionIndexes should handle missing privileges', async () => {
         const mockColl = {
             indexes: vi.fn().mockRejectedValue(new Error("Unauthorized")),
@@ -108,5 +112,35 @@ describe('DB Operations (Mocked)', () => {
         expect(indexes.name).toBe("users");
         expect(indexes.indexes).toEqual([]);
         expect(indexes.indexStats).toEqual([]);
+    });
+
+    it('fetchCollectionIndexes should sanitize indexStats hosts symbolically', async () => {
+        const mockColl = {
+            indexes: vi.fn().mockResolvedValue([{ v: 2, key: { _id: 1 }, name: "_id_" }]),
+            aggregate: () => ({
+                toArray: vi.fn().mockResolvedValue([
+                    { name: "_id_", host: "cluster-node-01.internal:27017", accesses: { ops: 10 } },
+                    { name: "email_1", host: "192.168.1.100:27017", accesses: { ops: 5 } },
+                    { name: "role_1", host: "cluster-node-01.internal:27017", accesses: { ops: 8 } }
+                ])
+            })
+        };
+        const mockDb = {
+            collection: () => mockColl
+        } as any;
+
+        const result = await fetchCollectionIndexes(mockDb, "users");
+        expect(result.indexes).toEqual([{ v: 2, key: { _id: 1 }, name: "_id_" }]);
+        expect(result.indexStats).toHaveLength(3);
+
+        // Assert hostname/IP are masked symbolically
+        expect(result.indexStats[0].host).not.toContain("cluster-node-01");
+        expect(result.indexStats[0].host).toBe("node_1:27017");
+
+        expect(result.indexStats[1].host).not.toContain("192.168.1.100");
+        expect(result.indexStats[1].host).toBe("node_2:27017");
+
+        // Assert identical hosts map to identical symbolic names
+        expect(result.indexStats[2].host).toBe("node_1:27017");
     });
 });
