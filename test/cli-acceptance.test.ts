@@ -27,7 +27,8 @@ describe.skipIf(process.env.SKIP_TESTCONTAINERS === 'true')('mongo-schema-fetch 
             beforeAll(async () => {
                 try {
                     container = await new MongoDBContainer(version).start();
-                    uri = container.getConnectionString();
+                    const baseUri = container.getConnectionString();
+                    uri = baseUri.includes('?') ? `${baseUri}&directConnection=true` : `${baseUri}?directConnection=true`;
 
                     client = new MongoClient(uri);
                     await client.connect();
@@ -88,18 +89,26 @@ describe.skipIf(process.env.SKIP_TESTCONTAINERS === 'true')('mongo-schema-fetch 
                 const roleField = userColl.schema.fields.find((f: any) => f.name === 'role');
                 expect(roleField).toBeDefined();
                 expect(roleField.type).toBe('String');
-                expect(roleField.enumValues).toContain('admin');
-                expect(roleField.enumValues).toContain('user');
-                expect(roleField.values).toBeUndefined();
+                const roleType = roleField.types.find((t: any) => t.name === 'String');
+                expect(roleType).toBeDefined();
+                expect(roleType.enumValues).toContain('admin');
+                expect(roleType.enumValues).toContain('user');
+                expect(roleType.values).toBeUndefined();
 
                 // Verify ObjectId / Date didn't leak values
                 const idField = userColl.schema.fields.find((f: any) => f.name === '_id');
-                expect(idField.values).toBeUndefined();
-                expect(idField.enumValues).toBeUndefined();
+                const idType = idField.types.find((t: any) => t.name === 'ObjectID' || t.name === 'ObjectId');
+                expect(idType).toBeDefined();
+                expect(idType.values).toBeUndefined();
+                expect(idType.enumValues).toBeUndefined();
 
                 const createdAtField = userColl.schema.fields.find((f: any) => f.name === 'createdAt');
                 if (createdAtField) {
-                    expect(createdAtField.values).toBeUndefined();
+                    const createdAtType = createdAtField.types.find((t: any) => t.name === 'Date');
+                    if (createdAtType) {
+                        expect(createdAtType.values).toBeUndefined();
+                        expect(createdAtType.enumValues).toBeUndefined();
+                    }
                 }
             });
         });

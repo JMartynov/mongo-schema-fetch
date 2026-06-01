@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/cli.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:acceptance": "cucumber-js --import ./tsx-register.js --import 'features/step_definitions/**/*.ts'"
   },
   "bin": {
     "mongo-schema-fetch": "./dist/cli.js"
@@ -35,11 +36,13 @@
     "prompts": "^2.4.2"
   },
   "devDependencies": {
+    "@cucumber/cucumber": "^12.9.0",
     "@testcontainers/mongodb": "^12.0.1",
     "@types/node": "^25.9.1",
     "@types/prompts": "^2.4.9",
     "testcontainers": "^12.0.1",
     "ts-node": "^10.9.2",
+    "tsx": "^4.22.4",
     "typescript": "^6.0.3",
     "vitest": "^4.1.7"
   }
