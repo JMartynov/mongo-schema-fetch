@@ -296,3 +296,37 @@ An array of objects, one for each scanned collection. Each object contains:
   ]
 }
 ```
+
+---
+
+## Testing
+
+This project includes a comprehensive test suite covering unit operations, CLI parsing, and real database integration tests using Docker containers.
+
+### 1. Unit & Integration Tests (Vitest)
+Unit and mock database integration tests are written in Vitest. They ensure core logic, error handling, parameter parsing, and schema cleaning function correctly.
+
+To run Vitest tests:
+```bash
+npm test
+```
+
+### 2. Gherkin Acceptance Tests (Cucumber + Testcontainers)
+Behavior-Driven Development (BDD) acceptance tests are written in Gherkin syntax using `@cucumber/cucumber` and executed against active, isolated MongoDB instances using Testcontainers.
+
+These tests guarantee compatibility and functionality across:
+- **MongoDB Versions**: `5.0`, `6.0`, `7.0`, and `8.0`.
+- **Database Configurations**: Standalone, Authenticated, and Replica Set Cluster environments.
+- **Connection Flags**: Validating routing behavior such as `--read-preference secondaryPreferred`.
+
+#### How it works:
+1. Cucumber launches isolated Docker containers via Testcontainers dynamically based on scenario parameters.
+2. The database is seeded with mock schemas and collections.
+3. The built CLI tool is executed against the container.
+4. Output payload assertions run to verify enums, server context, and zero-data-leak compliance.
+
+To run Gherkin BDD tests:
+```bash
+npm run test:acceptance
+```
+
