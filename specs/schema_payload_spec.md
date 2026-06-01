@@ -32,7 +32,11 @@ Provides the environment context of the profiled database. This is critical for 
   - `versionArray` (Array of Numbers): The version split into digits (e.g. `[7, 0, 5, 0]`).
   - `bits` (Number): Architecture bits (e.g., `64`).
   - `ok` (Number): MongoDB status code (`1`).
-- `hostInfo` (Object, **Optional**): The raw output of the `hostInfo` command. Contains information about the CPU, OS, and memory sizes of the server host. Empty if cluster access privileges are restricted.
+- `hostInfo` (Object, **Optional**): The sanitized output of the `hostInfo` command. Contains information about the CPU, OS, and memory sizes of the server host. Empty if cluster access privileges are restricted. To prevent network names or hostname leaking (Zero Data Leak Policy), the `hostname` property under `system` and the entire `extra` object are strictly removed.
+- `cpuArch` (String, **Optional**): The CPU architecture extracted from `hostInfo` (e.g. `"x86_64"` or `"aarch64"`).
+- `memSizeMB` (Number, **Optional**): The total host memory size in Megabytes extracted from `hostInfo`.
+- `numProcessors` (Number, **Optional**): The number of physical or logical CPU cores/processors extracted from `hostInfo`.
+- `wiredTigerCacheBytes` (Number, **Optional**): The engine-level configured maximum memory cache in bytes extracted from `serverStatus.wiredTiger.cache`.
 
 ### Example
 ```json
@@ -44,7 +48,23 @@ Provides the environment context of the profiled database. This is critical for 
     "bits": 64,
     "ok": 1
   },
-  "hostInfo": {}
+  "hostInfo": {
+    "system": {
+      "cpuAddrSize": 64,
+      "memSizeMB": 16384,
+      "numProcessors": 8,
+      "cpuArch": "x86_64"
+    },
+    "os": {
+      "type": "Darwin",
+      "name": "Mac OS X",
+      "version": "14.4"
+    }
+  },
+  "cpuArch": "x86_64",
+  "memSizeMB": 16384,
+  "numProcessors": 8,
+  "wiredTigerCacheBytes": 8589934592
 }
 ```
 

@@ -62,8 +62,8 @@ This document lists all useful features and option flags extracted from [OLD_REA
 
 ### Server & Host Context Extraction
 - **Description**: Extracting target server details via `buildInfo` and OS specifications via `hostInfo`. This includes memory size, CPU cores, architecture, and WiredTiger engine cache configurations.
-- **Status**: **Partially Implemented**
-- **Details**: Standard build version context is fetched and validated. OS and host metrics from `hostInfo` are collected if credentials permit, but specific hardware properties (like CPU counts, RAM sizes, or WiredTiger cache configs) are not actively structured or parsed into specific sub-keys.
+- **Status**: **Implemented**
+- **Details**: Standard build version context, OS metrics, hardware properties (CPU architecture, memory size, CPU count), and WiredTiger engine cache size configurations are safely retrieved, parsed into dedicated properties, and sanitized under the Zero Data Leak Policy.
 
 ### Collection Stats Gathering
 - **Description**: Compiling document counts, estimated document counts, average document size (`avgObjSize`), and total index size (`totalIndexSize`).

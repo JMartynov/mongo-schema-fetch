@@ -11,7 +11,11 @@ const schemaPayloadSchema = {
       type: "object",
       properties: {
         buildInfo: { type: "object" },
-        hostInfo: { type: "object" }
+        hostInfo: { type: "object" },
+        cpuArch: { type: "string" },
+        memSizeMB: { type: "number" },
+        numProcessors: { type: "number" },
+        wiredTigerCacheBytes: { type: "number" }
       },
       required: ["buildInfo"]
     },

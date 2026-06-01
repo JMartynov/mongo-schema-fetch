@@ -31,6 +31,32 @@ describe('Payload Validation (AJV)', () => {
         expect(validatePayload(payload)).toBe(true);
     });
 
+    it('should validate payload containing optional hardware and engine cache parameters', () => {
+        const payload = {
+            serverContext: {
+                buildInfo: { version: "7.0" },
+                hostInfo: { system: { cpuArch: "x86_64" } },
+                cpuArch: "x86_64",
+                memSizeMB: 16384,
+                numProcessors: 8,
+                wiredTigerCacheBytes: 8589934592
+            },
+            collections: []
+        };
+        expect(validatePayload(payload)).toBe(true);
+    });
+
+    it('should fail validation if cpuArch is not a string', () => {
+        const payload = {
+            serverContext: {
+                buildInfo: { version: "7.0" },
+                cpuArch: 12345 // should be string
+            },
+            collections: []
+        };
+        expect(validatePayload(payload)).toBe(false);
+    });
+
     it('should fail if serverContext is missing buildInfo', () => {
         const payload = {
             serverContext: {

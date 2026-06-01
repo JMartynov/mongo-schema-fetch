@@ -17,6 +17,53 @@ describe('DB Operations (Mocked)', () => {
         expect(ctx.hostInfo).toEqual({});
     });
 
+    it('fetchServerContext should extract and sanitize hardware & cache options', async () => {
+        const mockDb = {
+            admin: () => ({
+                command: vi.fn().mockImplementation((cmd) => {
+                    if (cmd.buildInfo) return Promise.resolve({ version: "7.0.8" });
+                    if (cmd.hostInfo) return Promise.resolve({
+                        system: {
+                            cpuArch: "x86_64",
+                            memSizeMB: 16384,
+                            numProcessors: 8,
+                            hostname: "sensitive-hostname"
+                        },
+                        os: {
+                            type: "Darwin",
+                            name: "Mac OS X"
+                        },
+                        extra: {
+                            cpuModel: "Intel Core i9"
+                        }
+                    });
+                    if (cmd.serverStatus) return Promise.resolve({
+                        wiredTiger: {
+                            cache: {
+                                "maximum bytes configured": 8589934592
+                            }
+                        }
+                    });
+                })
+            })
+        } as any;
+
+        const ctx = await fetchServerContext(mockDb);
+        expect(ctx.buildInfo).toEqual({ version: "7.0.8" });
+        expect(ctx.cpuArch).toBe("x86_64");
+        expect(ctx.memSizeMB).toBe(16384);
+        expect(ctx.numProcessors).toBe(8);
+        expect(ctx.wiredTigerCacheBytes).toBe(8589934592);
+        
+        // Assert sanitization
+        expect(ctx.hostInfo).toBeDefined();
+        expect(ctx.hostInfo.system).toBeDefined();
+        expect(ctx.hostInfo.system.cpuArch).toBe("x86_64");
+        expect(ctx.hostInfo.system.hostname).toBeUndefined();
+        expect(ctx.hostInfo.extra).toBeUndefined();
+        expect(ctx.hostInfo.os).toEqual({ type: "Darwin", name: "Mac OS X" });
+    });
+
     it('getCollectionNames should list collections', async () => {
         const mockDb = {
             listCollections: () => ({

@@ -16,8 +16,12 @@ export async function connectToDb(uri: string, readPreference?: string): Promise
 
 export async function fetchServerContext(db: Db): Promise<ServerContext> {
   const adminDb = db.admin();
-  let buildInfo = {};
-  let hostInfo = {};
+  let buildInfo: any = {};
+  let hostInfo: any = {};
+  let cpuArch: string | undefined;
+  let memSizeMB: number | undefined;
+  let numProcessors: number | undefined;
+  let wiredTigerCacheBytes: number | undefined;
 
   try {
     buildInfo = await adminDb.command({ buildInfo: 1 });
@@ -27,11 +31,45 @@ export async function fetchServerContext(db: Db): Promise<ServerContext> {
 
   try {
     hostInfo = await adminDb.command({ hostInfo: 1 });
+    if (hostInfo && hostInfo.system) {
+      if (typeof hostInfo.system.cpuArch === 'string') {
+        cpuArch = hostInfo.system.cpuArch;
+      }
+      if (typeof hostInfo.system.memSizeMB === 'number') {
+        memSizeMB = hostInfo.system.memSizeMB;
+      }
+      if (typeof hostInfo.system.numProcessors === 'number') {
+        numProcessors = hostInfo.system.numProcessors;
+      }
+      delete hostInfo.system.hostname;
+    }
+    if (hostInfo) {
+      delete hostInfo.extra;
+    }
   } catch (err: any) {
     console.warn("⚠️ Could not fetch hostInfo (requires cluster privileges).", err.message);
   }
 
-  return { buildInfo, hostInfo };
+  try {
+    const serverStatus = await adminDb.command({ serverStatus: 1 });
+    if (serverStatus && serverStatus.wiredTiger && serverStatus.wiredTiger.cache) {
+      const maxBytes = serverStatus.wiredTiger.cache['maximum bytes configured'];
+      if (typeof maxBytes === 'number') {
+        wiredTigerCacheBytes = maxBytes;
+      }
+    }
+  } catch (err: any) {
+    console.warn("⚠️ Could not fetch serverStatus (requires cluster privileges).", err.message);
+  }
+
+  return {
+    buildInfo,
+    hostInfo,
+    cpuArch,
+    memSizeMB,
+    numProcessors,
+    wiredTigerCacheBytes
+  };
 }
 
 export async function getCollectionNames(db: Db): Promise<string[]> {

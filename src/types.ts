@@ -1,6 +1,10 @@
 export interface ServerContext {
   buildInfo: any;
   hostInfo?: any;
+  cpuArch?: string;
+  memSizeMB?: number;
+  numProcessors?: number;
+  wiredTigerCacheBytes?: number;
 }
 
 export interface CollectionStats {
