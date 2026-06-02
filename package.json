@@ -1,8 +1,11 @@
 {
-  "name": "app",
+  "name": "mongo-schema-fetch",
   "version": "1.0.0",
   "description": "A secure CLI tool to extract MongoDB schema blueprints without exporting real data.",
-  "main": "index.js",
+  "main": "dist/cli.js",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "start": "node dist/cli.js",
@@ -10,7 +13,7 @@
     "test:acceptance": "cucumber-js --import ./tsx-register.js --import 'features/step_definitions/**/*.ts'"
   },
   "bin": {
-    "mongo-schema-fetch": "./dist/cli.js"
+    "mongo-schema-fetch": "dist/cli.js"
   },
   "engines": {
     "node": ">=20"
