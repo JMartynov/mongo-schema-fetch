@@ -8,10 +8,10 @@ export async function promptForCollections(allCollections: string[]): Promise<st
   console.log(`\n⚠️ Detected ${allCollections.length} collections. Scanning all of them might take a while.`);
 
   const response = await prompts({
-    type: 'multiselect',
+    type: 'autocompleteMultiselect',
     name: 'collections',
     message: 'Select the collections involved in your slow queries:',
-    instructions: 'Press <space> to select, <a> to toggle all, <i> to invert selection',
+    instructions: 'Press <space> to select, <a> to toggle all, <i> to invert selection, and start typing to search',
     choices: allCollections.map(c => ({ title: c, value: c })),
     min: 1
   });

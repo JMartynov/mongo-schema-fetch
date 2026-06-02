@@ -63,10 +63,13 @@ export function cleanSchema(schema: any, enumThreshold: number): any {
               const uniqueValues = obj.values;
               if (uniqueValues.length > 0 && uniqueValues.length < enumThreshold) {
                   // We only keep string values if they are short (< 100 chars)
-                  obj.enumValues = uniqueValues.filter((v: any) => {
+                  const filteredValues = uniqueValues.filter((v: any) => {
                       if (typeof v === 'string') return v.length <= 100;
                       return true;
                   });
+                  if (filteredValues.length > 0) {
+                      obj.enumValues = filteredValues;
+                  }
               }
           }
           // ALWAYS remove raw values to avoid data leak for ALL types

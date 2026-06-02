@@ -4,7 +4,10 @@ import { ServerContext, CollectionStats, CollectionIndexes } from './types.js';
 import { ReadPreferenceMode } from 'mongodb';
 
 export async function connectToDb(uri: string, readPreference?: string): Promise<{ client: MongoClient; db: Db }> {
-  const options: any = {};
+  const options: any = {
+    serverSelectionTimeoutMS: 5000,
+    connectTimeoutMS: 10000,
+  };
   if (readPreference) {
     options.readPreference = readPreference as ReadPreferenceMode;
   }
@@ -74,7 +77,7 @@ export async function fetchServerContext(db: Db): Promise<ServerContext> {
 
 export async function getCollectionNames(db: Db): Promise<string[]> {
   const collections = await db.listCollections().toArray();
-  return collections.map(c => c.name);
+  return collections.map(c => c.name).filter(name => !name.startsWith('system.'));
 }
 
 export async function fetchCollectionStats(db: Db, collectionName: string): Promise<CollectionStats> {

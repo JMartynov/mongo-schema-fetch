@@ -1,20 +1,47 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fetchServerContext, getCollectionNames, fetchCollectionStats, fetchCollectionIndexes, clearHostMap } from '../src/db.js';
+import { connectToDb, fetchServerContext, getCollectionNames, fetchCollectionStats, fetchCollectionIndexes, clearHostMap, sanitizeHost } from '../src/db.js';
+import { MongoClient } from 'mongodb';
+
+vi.mock('mongodb', () => {
+  const mClient = {
+    connect: vi.fn(),
+    db: vi.fn().mockReturnValue({})
+  };
+  return {
+    MongoClient: vi.fn().mockImplementation(function() {
+      return mClient;
+    })
+  };
+});
 
 describe('DB Operations (Mocked)', () => {
+    it('connectToDb should pass correct timeouts and readPreference', async () => {
+        const { client, db } = await connectToDb('mongodb://localhost', 'secondary');
+        
+        expect(MongoClient).toHaveBeenCalledWith('mongodb://localhost', {
+            serverSelectionTimeoutMS: 5000,
+            connectTimeoutMS: 10000,
+            readPreference: 'secondary'
+        });
+        expect(client.connect).toHaveBeenCalled();
+        expect(client.db).toHaveBeenCalled();
+    });
+
     it('fetchServerContext should handle permissions errors gracefully', async () => {
         const mockDb = {
             admin: () => ({
                 command: vi.fn().mockImplementation((cmd) => {
-                    if (cmd.buildInfo) return Promise.resolve({ version: "6.0" });
-                    if (cmd.hostInfo) return Promise.reject(new Error("Unauthorized"));
+                    if (cmd.buildInfo) return Promise.reject(new Error("Unauthorized buildInfo"));
+                    if (cmd.hostInfo) return Promise.reject(new Error("Unauthorized hostInfo"));
+                    if (cmd.serverStatus) return Promise.reject(new Error("Unauthorized serverStatus"));
                 })
             })
         } as any;
 
         const ctx = await fetchServerContext(mockDb);
-        expect(ctx.buildInfo).toEqual({ version: "6.0" });
+        expect(ctx.buildInfo).toEqual({});
         expect(ctx.hostInfo).toEqual({});
+        expect(ctx.wiredTigerCacheBytes).toBeUndefined();
     });
 
     it('fetchServerContext should extract and sanitize hardware & cache options', async () => {
@@ -64,15 +91,22 @@ describe('DB Operations (Mocked)', () => {
         expect(ctx.hostInfo.os).toEqual({ type: "Darwin", name: "Mac OS X" });
     });
 
-    it('getCollectionNames should list collections', async () => {
+    it('getCollectionNames should list collections and filter system.*', async () => {
         const mockDb = {
             listCollections: () => ({
-                toArray: () => Promise.resolve([{ name: "users" }, { name: "orders" }])
+                toArray: () => Promise.resolve([{ name: "users" }, { name: "system.profile" }, { name: "orders" }])
             })
         } as any;
 
         const names = await getCollectionNames(mockDb);
         expect(names).toEqual(["users", "orders"]);
+    });
+
+    it('sanitizeHost should handle IPv6 addresses and strip brackets', () => {
+        clearHostMap();
+        expect(sanitizeHost('[fe80::1]:27017')).toBe('node_1:27017');
+        expect(sanitizeHost('[::1]')).toBe('node_2');
+        expect(sanitizeHost('192.168.1.1:27017')).toBe('node_3:27017');
     });
 
     it('fetchCollectionStats should fall back to estimations if collStats fails', async () => {
