@@ -64,6 +64,7 @@ If you have multiple collections, this will launch an interactive prompt asking 
 | `--enum-threshold <number>` | Threshold limit for saving enum values. If unique values in a field are below this number, they are saved. | `20` |
 | `--read-preference <mode>` | Specify read preference (e.g., `secondary`) for Replica Sets to avoid burdening the primary node. | None |
 | `--quiet` | Disable all interactive prompts and "Magic Link" upload requests. Essential for CI/CD environments. | `false` |
+| `--additional` | Enable collection of advanced execution query plan cache stats (`$planCacheStats`) and latency histograms (`$collStats`). | `false` |
 | `-h, --help` | Display help for command. | |
 
 ### Use Case Examples
@@ -118,16 +119,26 @@ The output file contains two main top-level properties: `serverContext` and `col
 #### 1. `serverContext`
 Contains metadata about the MongoDB environment. Crucial for understanding query planner behavior which changes between versions.
 * **`buildInfo`**: The exact build version of the database.
-* **`hostInfo`** (Optional): Information about the underlying OS and CPU/RAM limits.
+* **`hostInfo`** (Optional): Information about the underlying OS and CPU/RAM limits (sanitized to remove `hostname` and `extra` platform keys).
+* **`cpuArch` / `memSizeMB` / `numProcessors`** (Optional): Extracted core hardware properties.
+* **`wiredTigerCacheBytes`** (Optional): Configured WiredTiger engine maximum cache memory.
+* **`concurrentTransactions`** (Optional): Current read and write concurrency ticket availability.
+* **`cacheDirtyRatio`** (Optional): Cache dirty ratio percentage indicating memory flushing overhead.
+* **`pagesEvictedByApp`** (Optional): Pages evicted by application threads indicating severe cache memory pressure.
 
 #### 2. `collections`
 An array of objects, one for each scanned collection. Each object contains:
-* **`stats`**: Metrics about the collection's size and footprint.
+* **`stats`**: Metrics about the collection's size, storage type, and execution footprints.
   * `name`: Collection name.
   * `count`: Precise document count.
   * `estimatedDocumentCount`: Fast metadata count.
   * `avgObjSize`: Average size of a document in bytes.
   * `totalIndexSize`: The combined size of all indexes in bytes.
+  * `type` (Optional): Collection storage model (e.g. `"collection"`, `"view"`, `"timeseries"`).
+  * `options` (Optional): Storage options (capped size limit, timeseries fields, clustered index).
+  * `validator` (Optional): Database-enforced schema constraints (like `$jsonSchema` validators).
+  * `planCache` (Optional): Cached query execution plans (only under `--additional`).
+  * `latencyStats` (Optional): Read/write latency statistics and histograms (only under `--additional`).
 * **`indexes`**: Metadata regarding how the collection is indexed.
   * `name`: Collection name.
   * `indexes`: The raw index definition (keys, direction, unique/sparse flags).

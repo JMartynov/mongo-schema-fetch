@@ -99,3 +99,43 @@ When analyzing large collections containing very large documents (which can reac
 * **Verification**:
   * Implemented in [schema.ts](file:///Users/ivan/Project/3t.tools.intellij/mongo/mongo-schema-fetch/src/schema.ts) (dynamic limit logic and streaming via `Readable.from(cursor)`).
   * Unit tests verify dynamic sizes and stream piping.
+
+---
+
+## UC-6: Storage-Model Awareness (Views, Time-Series, Capped, Clustered collections)
+
+### Description
+Downstream query optimization engines behave differently depending on the collection storage models. For example, index recommendations must be disabled for views, and bucket-friendly, compressed indexes must be prioritised for timeseries collections. The utility extracts collection structure metadata to support storage-model awareness.
+
+### Requirements & Invariants
+1. **Metadata Extraction**: Fetch collection definitions using `db.listCollections({ name })`.
+2. **Structural Properties**: Extract type (e.g. `"timeseries"`, `"view"`, `"collection"`), options (capped parameters, timeseries specifications, clustered index details), and validator rules.
+3. **Decoupled Validation Rules**: Extracted database-enforced schema validations (`validator` objects like `$jsonSchema` rules) must be decoupled from general options to provide clear validation targets for optimization engines.
+
+### Status
+**Implemented**
+
+* **Verification**:
+  * Handled in [db.ts](file:///Users/ivan/Project/3t.tools.intellij/mongo/mongo-schema-fetch/src/db.ts) (querying `db.listCollections().toArray()`).
+  * Unit tests in [db.test.ts](file:///Users/ivan/Project/3t.tools.intellij/mongo/mongo-schema-fetch/test/db.test.ts) assert collection type, options, and validator mappings.
+  * Validation rules verified in [validation.test.ts](file:///Users/ivan/Project/3t.tools.intellij/mongo/mongo-schema-fetch/test/validation.test.ts).
+
+---
+
+## UC-7: Extended Database Engine Telemetry (Diagnostics)
+
+### Description
+Operators and automated optimization systems require performance indicators to diagnose query stalls, read/write ticket exhaustion, memory dirty limits, and latency spikes. The utility extracts concurrency tickets, eviction metrics, cache dirty rates, plan cache details, and read/write latency distributions.
+
+### Requirements & Invariants
+1. **Server status telemetry**: Extract WiredTiger cache maximum bytes configured, currently dirty bytes, and application thread eviction counts. Extract concurrent transaction tickets (read/write available and out).
+2. **Anonymized Host Data**: Mask replica set and host names symbolically (`node_1:27017`) in indexStats accesses to enforce Zero Data Leak Policy.
+3. **Optional diagnostic aggregations**: Under the `--additional` CLI flag, query plan cache shape details via `$planCacheStats` and read/write latency histograms via `$collStats`.
+
+### Status
+**Implemented**
+
+* **Verification**:
+  * Telemetry extraction is implemented in `fetchServerContext` and `fetchCollectionStats` in [db.ts](file:///Users/ivan/Project/3t.tools.intellij/mongo/mongo-schema-fetch/src/db.ts).
+  * Host masking logic tested in [db.test.ts](file:///Users/ivan/Project/3t.tools.intellij/mongo/mongo-schema-fetch/test/db.test.ts) (TC-DB-08).
+  * Conditional diagnostic stats tested in [db.test.ts](file:///Users/ivan/Project/3t.tools.intellij/mongo/mongo-schema-fetch/test/db.test.ts) (TC-DB-09).

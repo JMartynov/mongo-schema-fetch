@@ -56,6 +56,11 @@ This document lists all useful features and option flags extracted from [OLD_REA
 - **Status**: **Implemented**
 - **Details**: Triggers mock analysis in [upload.ts](file:///Users/ivan/Project/3t.tools.intellij/mongo/mongo-schema-fetch/src/upload.ts#L5).
 
+### --additional
+- **Description**: Enables the extraction of advanced query plan cache shape details (`$planCacheStats`) and read/write latency histograms (`$collStats`).
+- **Status**: **Implemented**
+- **Details**: Configured in [cli.ts](file:///Users/ivan/Project/3t.tools.intellij/mongo/mongo-schema-fetch/src/cli.ts) and passed to `fetchCollectionStats` in [db.ts](file:///Users/ivan/Project/3t.tools.intellij/mongo/mongo-schema-fetch/src/db.ts) to conditionally query aggregations.
+
 ---
 
 ## 2. Core Operational Features
@@ -65,10 +70,20 @@ This document lists all useful features and option flags extracted from [OLD_REA
 - **Status**: **Implemented**
 - **Details**: Standard build version context, OS metrics, hardware properties (CPU architecture, memory size, CPU count), and WiredTiger engine cache size configurations are safely retrieved, parsed into dedicated properties, and sanitized under the Zero Data Leak Policy.
 
+### Extended Diagnostic Telemetry
+- **Description**: Extracting server-level engine diagnostics, including concurrent read/write transactions (available and out tickets), cache dirty ratio percentage, application thread eviction pressure, plan cache shapes, and read/write latency histograms.
+- **Status**: **Implemented**
+- **Details**: Extracted from `{ serverStatus: 1 }` (WiredTiger concurrent transactions, cache dirty ratio, application eviction pages) and conditional aggregations (`$planCacheStats`, `$collStats` latency statistics) in [db.ts](file:///Users/ivan/Project/3t.tools.intellij/mongo/mongo-schema-fetch/src/db.ts).
+
 ### Collection Stats Gathering
 - **Description**: Compiling document counts, estimated document counts, average document size (`avgObjSize`), and total index size (`totalIndexSize`).
 - **Status**: **Implemented**
 - **Details**: Fetched using `collStats` command with estimation fallbacks in [db.ts](file:///Users/ivan/Project/3t.tools.intellij/mongo/mongo-schema-fetch/src/db.ts#L42-L64).
+
+### Storage-Model Awareness
+- **Description**: Extracting collection storage models, including metadata configurations for Views, Time-Series collections, Capped limits, and Clustered indexes.
+- **Status**: **Implemented**
+- **Details**: Retrieved using `db.listCollections({ name })` in [db.ts](file:///Users/ivan/Project/3t.tools.intellij/mongo/mongo-schema-fetch/src/db.ts) and returning `type`, `options`, and enforced `$jsonSchema` rules (`validator`).
 
 ### Index Structures & Usage Profiling
 - **Description**: Pulling index keys, options, and index access operations (`$indexStats`) to detect unused indexes.
