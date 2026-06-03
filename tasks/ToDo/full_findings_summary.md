@@ -39,23 +39,24 @@ To prevent the leak of internal network architecture, database nodes, or server 
 
 ## 3. MongoDB Diagnostics & Optimization Matrix
 
-Below is the consolidated matrix mapping currently collected statistics alongside future opportunities to drive automated query, index, and storage optimization.
+The following matrix maps currently collected metrics alongside future diagnostic opportunities, detailing their implementation status, extraction methods, optimization categories, and sensitive data exposure risks.
 
-### Collected Metrics (Active)
-* **`buildInfo`**: Maps engine version to check version-specific query planner rules.
-* **`hostInfo` (Sanitized)**: Evaluates core counts and RAM to recommend query concurrency.
-* **`wiredTigerCacheBytes`**: Compares total database working set against RAM cache limits.
-* **`collStats`**: Predicts growth rates, average document sizes, and index storage overhead.
-* **`indexes`**: Verifies if queries align with existing compound or single-field indexes.
-* **`indexStats` (Sanitized)**: Flags unused indexes (where `ops === 0` over a long period) to be dropped, improving write performance.
-* **`mongodb-schema` (Inferred)**: Profiles schema structures, identifies enums, and details polymorphic (mixed type) fields.
-
-### Advanced Diagnostic Opportunities (Proposed)
-* **`$planCacheStats`**: Inspects cached query plans, query hashes, and index selections to diagnose query planner issues.
-* **`db.getCollectionInfos()`**: Retrieves database-enforced `$jsonSchema` rules to compare server validations with actual observed shapes.
-* **`adminCommand({ top: 1 })`**: Identifies "hot collections" causing high write lock or read latencies.
-* **`db.system.profile` (Profiler)**: Captures slow queries directly from database logs, logging keys vs. documents examined to highlight index recommendations.
-* **`explain("executionStats")`**: Analyzes user-supplied query files to identify execution bottlenecks, full collection scans (`COLLSCAN`), and covered queries.
+| Feature / Metric | Status | How to Get Feature | Purpose, Benefit & Optimization Category | Sensitive Data Exposure Risks |
+| :--- | :--- | :--- | :--- | :--- |
+| **Server Engine Details** (`buildInfo`) | **Implemented** | `adminDb.command({ buildInfo: 1 })` | **Query/Index Optimization**: Identifies target version for optimizer planning. | Low. Discloses engine version and git revision, no actual data. |
+| **Host System Info** (`hostInfo`) | **Implemented** (Sanitized) | `adminDb.command({ hostInfo: 1 })` | **Other (Compute/Concurrency)**: Identifies CPU cores and RAM size. | **High**: Contains hostname and machine details. Resolved by deleting `hostname` and the `extra` block. |
+| **Engine Cache Configuration** | **Implemented** | `adminDb.command({ serverStatus: 1 })` -> `wiredTiger.cache` | **Other (Memory Cache)**: Audits available memory for index working set. | Low. Discloses bytes allocated, no data structures. |
+| **Collection Storage Stats** | **Implemented** | `db.command({ collStats: collName })` with estimation fallbacks | **Schema/Index Optimization**: Reports size, document count, and index sizes. | Low. Shows volume metrics, no document content. |
+| **Index Specifications** | **Implemented** | `coll.indexes()` | **Index/Query Optimization**: Verifies query field matching with indexes. | Low. Displays index keys, no field values. |
+| **Index Access Usage** (`$indexStats`) | **Implemented** (Sanitized) | `coll.aggregate([{ $indexStats: {} }])` | **Index Optimization**: Identifies unused indexes to improve write performance. | **Medium**: Exposes replica set network hostnames. Resolved by symbolic masking (`node_1:27017`). |
+| **Probabilistic Collection Schema** | **Implemented** (Sanitized) | `coll.aggregate([{ $sample: { size: limit } }])` $\rightarrow$ `mongodb-schema` | **Schema Optimization**: Details field types, path, enums. | **Critical**: Can expose actual field values. Resolved by stripping `values` array and truncating strings. |
+| **Aggregation plan cache** (`$planCacheStats`) | **Not Implemented** | `coll.aggregate([{ $planCacheStats: {} }])` | **Query/Index Optimization**: Inspects cached execution plans and queries. | Low. Discloses query shapes and hashes, no literal document values. |
+| **Enforced Schema Validation** | **Not Implemented** | `db.getCollectionInfos({ name: collName })` | **Schema Optimization**: Audits database-enforced `$jsonSchema` rules. | Low. Discloses database structural constraints. |
+| **Collection Read/Write Hots** | **Not Implemented** | `adminDb.command({ top: 1 })` | **Other (Priority Tuning)**: Identifies high-latency write/read collections. | Low. Exposes collection-level latency timings. |
+| **Slow Query Profiler Logs** | **Not Implemented** | query on `db.system.profile` | **Query/Index Optimization**: Recommends indexes based on slow queries. | **Critical**: Contains literal query arguments and filter values. Needs query parsing/scrubbing before export. |
+| **Ad-hoc Query Execution Plans** | **Not Implemented** | `coll.find(query).explain("executionStats")` | **Query/Index Optimization**: Identifies `COLLSCAN` and covered queries. | **High**: Contains literal filter values inside query shape. Needs values scrubbing. |
+| **WiredTiger Concurrent Tickets** | **Not Implemented** | `adminDb.command({ serverStatus: 1 })` -> `wiredTiger.concurrentTransactions` | **Other (Performance Diagnostics)**: Detects read/write thread contention. | Low. Represents numeric transaction thread slots. |
+| **Time-To-Live (TTL) Specs** | **Partially Implemented** | check `expireAfterSeconds` in `coll.indexes()` | **Index/Storage Optimization**: Checks if logs/events clean up automatically. | Low. Discloses index expiration options. |
 
 ---
 
