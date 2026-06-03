@@ -181,7 +181,30 @@ An array of objects, one for each scanned collection. Each object contains:
       "maxBsonObjectSize": 16777216,
       "storageEngines": ["devnull", "ephemeralForTest", "wiredTiger"],
       "ok": 1
-    }
+    },
+    "hostInfo": {
+      "system": {
+        "cpuAddrSize": 64,
+        "memSizeMB": 16384,
+        "numProcessors": 8,
+        "cpuArch": "x86_64"
+      },
+      "os": {
+        "type": "Darwin",
+        "name": "Mac OS X",
+        "version": "14.4"
+      }
+    },
+    "cpuArch": "x86_64",
+    "memSizeMB": 16384,
+    "numProcessors": 8,
+    "wiredTigerCacheBytes": 8589934592,
+    "concurrentTransactions": {
+      "read": { "available": 128, "out": 0 },
+      "write": { "available": 128, "out": 0 }
+    },
+    "cacheDirtyRatio": 0.45,
+    "pagesEvictedByApp": 0
   },
   "collections": [
     {
@@ -190,7 +213,33 @@ An array of objects, one for each scanned collection. Each object contains:
         "count": 15000,
         "estimatedDocumentCount": 15000,
         "avgObjSize": 145,
-        "totalIndexSize": 36864
+        "totalIndexSize": 36864,
+        "type": "collection",
+        "options": {},
+        "validator": {
+          "$jsonSchema": {
+            "bsonType": "object",
+            "required": ["email"],
+            "properties": {
+              "email": {
+                "bsonType": "string",
+                "description": "must be a string and is required"
+              }
+            }
+          }
+        },
+        "planCache": [
+          {
+            "planCacheShapeHash": "A1B2C3D4",
+            "isActive": true,
+            "works": 42
+          }
+        ],
+        "latencyStats": {
+          "reads": { "latency": 15200, "ops": 120 },
+          "writes": { "latency": 45000, "ops": 250 },
+          "commands": { "latency": 0, "ops": 0 }
+        }
       },
       "indexes": {
         "name": "users",
