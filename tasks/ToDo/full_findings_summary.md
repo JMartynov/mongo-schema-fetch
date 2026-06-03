@@ -7,8 +7,10 @@ This document presents the complete findings of the improvements implemented in 
 ## 1. Executive Summary
 
 During this optimization cycle, we achieved two primary goals:
+
 1. **Utility Upgrades**: We expanded the `serverContext` metadata extraction to include detailed hardware properties, WiredTiger cache limits, and implemented symbolic hostname/IP masking to enforce the Zero Data Leak Policy.
 2. **Advanced Performance Research**: We conducted a deep analysis of currently collected parameters and mapped out advanced diagnostic commands, aggregation stages, and index strategies to drive next-generation query and database optimizations.
+3. **Modern Aggregation-Based Diagnostics Integration**: Analyzed the paradigm shift from legacy monolithic administrative commands to continuous, queryable data streams (spanning v6.2 through v8.0), integrating advanced telemetry from stages like `$queryStats`, `$currentOp`, and sophisticated WiredTiger cache mechanics.
 
 ---
 
@@ -17,6 +19,7 @@ During this optimization cycle, we achieved two primary goals:
 We modified seven source and test files to introduce the following upgrades:
 
 ### A. Hardware & Engine Metrics Extraction
+
 * **CPU Architecture**: Extracted `cpuArch` (e.g., `"x86_64"`, `"aarch64"`) from the host's system configuration.
 * **Memory Capacity**: Extracted `memSizeMB` (total physical memory in megabytes) from the host system.
 * **Processor Counts**: Extracted `numProcessors` (logical cores count) to scale query execution thread boundaries.
@@ -24,14 +27,19 @@ We modified seven source and test files to introduce the following upgrades:
 * **Graceful Degradation**: Wrapped all system/admin command runs in separate `try-catch` blocks. If cluster monitoring privileges are missing, the tool logs warnings and proceeds rather than failing, ensuring compatibility with restricted database roles.
 
 ### B. Zero Data Leak Hostname & IP Symbolic Masking
+
 To prevent the leak of internal network architecture, database nodes, or server details in the exported schema blueprint:
+
 1. **Host Info Cleaning**: Deleted `hostname` from `hostInfo.system` and stripped the entire `extra` object (which can contain kernel paths and processor models).
 2. **Symbolic Address Mapping**: Implemented a deterministic, stateful mapping in the database driver layer. Host strings retrieved during index access diagnostics (e.g. `$indexStats`) are mapped to sequential, anonymous identifiers:
-   * `cluster-node-01.internal.net:27017` $\rightarrow$ `node_1:27017`
-   * `192.168.1.100:27017` $\rightarrow$ `node_2:27017`
-   * Identical hosts map consistently to the same symbol within the payload to maintain replica set relationship visibility without disclosing actual IP/host identities.
+* `cluster-node-01.internal.net:27017` $\rightarrow$ `node_1:27017`
+* `192.168.1.100:27017` $\rightarrow$ `node_2:27017`
+* Identical hosts map consistently to the same symbol within the payload to maintain replica set relationship visibility without disclosing actual IP/host identities.
+
+
 
 ### C. Testing Verification
+
 * **Vitest Unit/Integration Tests**: Added tests in `test/db.test.ts` and `test/validation.test.ts` to assert that hardware keys are correctly parsed, sanitization blocks succeed, and validation schemas enforce proper types. All 26 tests passed.
 * **Cucumber BDD Acceptance Tests**: Executed 8 Cucumber scenarios (59 steps) using Docker `Testcontainers` simulating standalone and authenticated databases, replicas, and read-preferences (`secondaryPreferred`). All scenarios passed.
 
@@ -39,10 +47,10 @@ To prevent the leak of internal network architecture, database nodes, or server 
 
 ## 3. MongoDB Diagnostics & Optimization Matrix
 
-The following matrix maps currently collected metrics alongside future diagnostic opportunities, detailing their implementation status, extraction methods, optimization categories, and sensitive data exposure risks.
+The following matrix maps currently collected metrics alongside future diagnostic opportunities, detailing their implementation status, extraction methods, optimization categories, and sensitive data exposure risks. New capabilities leveraging the recent shift towards aggregation-based diagnostics have been appended.
 
 | Feature / Metric | Status | How to Get Feature | Purpose, Benefit & Optimization Category | Sensitive Data Exposure Risks |
-| :--- | :--- | :--- | :--- | :--- |
+| --- | --- | --- | --- | --- |
 | **Server Engine Details** (`buildInfo`) | **Implemented** | `adminDb.command({ buildInfo: 1 })` | **Query/Index Optimization**: Identifies target version for optimizer planning. | Low. Discloses engine version and git revision, no actual data. |
 | **Host System Info** (`hostInfo`) | **Implemented** (Sanitized) | `adminDb.command({ hostInfo: 1 })` | **Other (Compute/Concurrency)**: Identifies CPU cores and RAM size. | **High**: Contains hostname and machine details. Resolved by deleting `hostname` and the `extra` block. |
 | **Engine Cache Configuration** | **Implemented** | `adminDb.command({ serverStatus: 1 })` -> `wiredTiger.cache` | **Other (Memory Cache)**: Audits available memory for index working set. | Low. Discloses bytes allocated, no data structures. |
@@ -50,34 +58,78 @@ The following matrix maps currently collected metrics alongside future diagnosti
 | **Index Specifications** | **Implemented** | `coll.indexes()` | **Index/Query Optimization**: Verifies query field matching with indexes. | Low. Displays index keys, no field values. |
 | **Index Access Usage** (`$indexStats`) | **Implemented** (Sanitized) | `coll.aggregate([{ $indexStats: {} }])` | **Index Optimization**: Identifies unused indexes to improve write performance. | **Medium**: Exposes replica set network hostnames. Resolved by symbolic masking (`node_1:27017`). |
 | **Probabilistic Collection Schema** | **Implemented** (Sanitized) | `coll.aggregate([{ $sample: { size: limit } }])` $\rightarrow$ `mongodb-schema` | **Schema Optimization**: Details field types, path, enums. | **Critical**: Can expose actual field values. Resolved by stripping `values` array and truncating strings. |
-| **Aggregation plan cache** (`$planCacheStats`) | **Not Implemented** | `coll.aggregate([{ $planCacheStats: {} }])` | **Query/Index Optimization**: Inspects cached execution plans and queries. | Low. Discloses query shapes and hashes, no literal document values. |
+| **Aggregation plan cache** (`$planCacheStats`) | **Not Implemented** | `coll.aggregate([{ $planCacheStats: {} }])` | **Query/Index Optimization**: Inspects cached execution plans, extracting `works` and `planCacheShapeHash`. | Low. Discloses query shapes and hashes, no literal document values. |
 | **Enforced Schema Validation** | **Not Implemented** | `db.getCollectionInfos({ name: collName })` | **Schema Optimization**: Audits database-enforced `$jsonSchema` rules. | Low. Discloses database structural constraints. |
 | **Collection Read/Write Hots** | **Not Implemented** | `adminDb.command({ top: 1 })` | **Other (Priority Tuning)**: Identifies high-latency write/read collections. | Low. Exposes collection-level latency timings. |
 | **Slow Query Profiler Logs** | **Not Implemented** | query on `db.system.profile` | **Query/Index Optimization**: Recommends indexes based on slow queries. | **Critical**: Contains literal query arguments and filter values. Needs query parsing/scrubbing before export. |
 | **Ad-hoc Query Execution Plans** | **Not Implemented** | `coll.find(query).explain("executionStats")` | **Query/Index Optimization**: Identifies `COLLSCAN` and covered queries. | **High**: Contains literal filter values inside query shape. Needs values scrubbing. |
 | **WiredTiger Concurrent Tickets** | **Not Implemented** | `adminDb.command({ serverStatus: 1 })` -> `wiredTiger.concurrentTransactions` | **Other (Performance Diagnostics)**: Detects read/write thread contention. | Low. Represents numeric transaction thread slots. |
 | **Time-To-Live (TTL) Specs** | **Partially Implemented** | check `expireAfterSeconds` in `coll.indexes()` | **Index/Storage Optimization**: Checks if logs/events clean up automatically. | Low. Discloses index expiration options. |
+| **Active Query Execution** (`$currentOp`) | **Not Implemented** | `coll.aggregate([{ $currentOp: { idleConnections: true } }])` | **Performance Optimization**: Tracks long-running transactions and real-time index build progressions (`progress.done`, `msg`). | **High**: Can expose live operational payloads and queries. |
+| **Collection Latency Histograms** (`$collStats`) | **Not Implemented** | `coll.aggregate([{ $collStats: { latencyStats: { histograms: true } } }])` | **Schema Efficiency**: Identifies micro-stalls and working set eviction via read/write latency histograms (`micros` and `count`). | Low. Only reveals bucketed timing metrics. |
+| **Continuous Query Profiling** (`$queryStats`) | **Not Implemented** | `coll.aggregate([{ $queryStats: {} }])` | **Query Optimization**: Provides continuous, in-memory telemetry (Query Store) tracking `metrics.lastExecutionMicros` (MongoDB 8.0+). | **Medium**: Exposes query structures via `queryShapeHash`. |
+| **Network & Replication Topologies** | **Not Implemented** | `adminDb.command({ replSetGetStatus: 1 })` | **High Availability**: Detects high-latency network routes (`pingMs`), oplog status (`optimes`), and failover risks. | **Medium**: Exposes internal node network metadata. |
+| **Replica Set Data Consistency** (`dbCheck`) | **Not Implemented** | `db.command({ dbCheck: 1 })` | **Data Integrity**: Safely detects silent data corruption across replica sets in the background via cryptographic hashing. | Low. Logs to internal healthlog collections. |
+| **Structural Integrity** (`validate`) | **Not Implemented** | `db.command({ validate: collName })` | **Data Integrity**: Scans collections locally for physical BSON corruption. Note: Triggers severe exclusive write locks. | Low. Provides structural health data. |
+| **Configuration & Security Auditing** | **Not Implemented** | `adminDb.command({ getCmdLineOpts: 1 })` | **Compliance**: Verifies proper optimization parameters and security telemetry frameworks (SIEM audit logging) are loaded. | **High**: Discloses server paths, configurations, and security filter definitions. |
 
 ---
 
 ## 4. Advanced Optimization Patterns Researched
 
 ### A. Explain Stage Diagnostics
+
 When evaluating query executions, the optimizer should target:
+
 * **`COLLSCAN`**: Immediately flag for index creation.
 * **`FETCH`**: If preceded by `IXSCAN`, look for opportunities to add missing projected fields to the index to convert the query into a **Covered Query** (eliminating disk fetches).
 * **`SORT`**: If sorting is done in memory and exceeds 100MB, the query will fail. Propose compound indexes that incorporate sort keys following the **ESR (Equality, Sort, Range)** rule.
+* **Sort Spill Limitations**: Track `metrics.query.sort.spillToDisk` in telemetry. A non-zero value indicates that memory limits were exceeded and sorting spilled to the physical disk, resulting in a severe latency penalty. Mandates immediate schema optimization or selective `$match`/`$limit` stage inclusion.
+* **Explain Restrictions**: Crucially, an aggregation pipeline containing a `$out` or `$merge` stage cannot utilize `explain()` in `executionStats` or `allPlansExecution` modes. Output stages must be temporarily removed when profiling complex transformations.
+* **Query Settings Override**: Legacy Index Filters are officially deprecated starting in MongoDB 8.0. Administrators must use the `setQuerySettings` command to establish persistent, cluster-wide operation rejection filters to block prohibited `queryShapeHash` values.
 
 ### B. Aggregation Pipeline Optimizations
+
 * **Stage Coalescing**: Validate that `$match` stages are placed at the very beginning of the pipeline so they merge into the initial query scanner (`$cursor`), minimizing document load.
-* **Unindexed `$lookup`**: Audit foreign collections referenced in `$lookup` stages. If the foreign field lacks an index, the engine executes a full collection scan per input document. Recommend index creation on the foreign field.
+* **Unindexed `$lookup**`: Audit foreign collections referenced in `$lookup` stages. If the foreign field lacks an index, the engine executes a full collection scan per input document. Recommend index creation on the foreign field.
 
 ### C. Redundant Indexes
+
 * **Prefix Rule**: An index is redundant if its key sequence is the leading prefix of a compound index (e.g., `{ name: 1 }` is redundant if `{ name: 1, email: 1 }` exists).
 * **Action**: Recommend dropping prefix indexes to save memory and write latency, unless they enforce unique constraints.
 
 ### D. WiredTiger Storage Optimizations
+
 * **Disk Fragmentation**: Calculated as `storageSize / size`. If this ratio exceeds 1.5, it indicates substantial empty space inside database files due to frequent updates/deletions. Recommend running `compact`.
 * **Concurrent Transaction Tickets**: If available read/write tickets drop to zero under `serverStatus`, it indicates threads are locked waiting for disk I/O, pointing to slow, unindexed scans.
 * **Selective Partial Indexes**: Recommend `partialFilterExpression` for fields with skewed query patterns (e.g. `{ deleted: false }`) to shrink index sizes.
 * **Case-Insensitive Collation**: Propose collation indexes (strength 2) instead of CPU-heavy case-insensitive regex options (`$options: "i"`).
+* **Cache Dirty Data Thresholds**: Monitor `tracked dirty bytes in the cache`. If it exceeds 5% of the total configured cache size, incoming write operations are outpacing the storage engine's ability to compress and flush to disk.
+* **Eviction Thread Diagnostics**: A high or rapidly increasing count of `pages evicted by application threads` is a definitive symptom of an active database stall, indicating background eviction threads couldn't keep up and forced active client connections to clear cache memory.
+* **Dynamic Configuration Tuning**: Eviction blocks can be mitigated dynamically (without restarting the cluster) via `setParameter`: `wiredTigerEngineRuntimeConfig: "eviction=(threads_min=4,threads_max=8)"`.
+* **Transaction Limits**: Long-running transactions pin older, obsolete page versions in the cache. Setting a strict `transactionLifetimeLimitSeconds` parameter is the recommended defense to prevent total lockups of the storage engine.
+
+### E. The Aggregation-Based Diagnostics Paradigm
+
+* **Deprecation of Legacy Commands**: Legacy monolithic commands such as `currentOp`, `collStats`, `dbStats`, and `top` have undergone aggressive deprecation since MongoDB 6.2. Diagnostics must now be performed utilizing corresponding aggregation stages (e.g., `$currentOp`, `$collStats`) to allow in-engine MQL filtering, minimizing network payloads.
+* **Index Build Monitoring**: Utilize the `$currentOp` stage with a match for `{ "command.createIndexes": { $exists: true } }`. This reveals granular, real-time progress (`progress.done` vs `progress.total`) and internal phases (`msg: "Index Build: scanning collection"`). Remaining build time can be mathematically projected using the `secs_running` field. Note that in replica sets, `idleConnections: true` is required to capture builds waiting on a commit quorum.
+
+### F. Query Optimizer Observability
+
+* **Shape Hashing Evolution**: The legacy `queryHash` field used to identify logical query shapes has been deprecated in MongoDB 8.0, replaced by the significantly more robust `planCacheShapeHash`.
+* **Cache Triage**: By querying `$planCacheStats`, administrators can identify the `works` count (the number of discrete logic steps performed to find a winning plan). A high `works` count pinpoints inefficient structures. If polluted with suboptimal plans, the cache can be surgically cleared using the `planCacheClear` command.
+* **Continuous Query Telemetry**: MongoDB 8.0 introduced the Query Store via the `$queryStats` aggregation stage. This tracks continuous, lightweight runtime statistics in server memory grouped by `queryShapeHash`, exposing metrics like `metrics.lastExecutionMicros` to proactively detect latency drift without the massive CPU overhead of traditional system profilers.
+
+### G. Replication Topologies & Connection Pools
+
+* **Network & Replication Lag**: Use `replSetGetStatus` to track `pingMs` (identifying faulty network layers/packet loss between primary and secondaries) and track replication progress via `optimes` (`applied`, `durable`, `last_committed`). MongoDB 8.0 upgraded this telemetry to include election metrics like `lastSeenWrittenOpTimeAtElection` for deep post-mortem auditing of data rollback risks. Legacy single-buffer metrics have been deprecated in favor of `apply.count` and `write.count` for tracking concurrent operation queues.
+* **Connection Storm Diagnostics**: Under `serverStatus`, the new metrics `connections.queuedForEstablishment` and `connections.establishmentRateLimit` allow teams to detect active connection storms and connection throttling, triggering infrastructure load-balancer tuning and `tcp_keepalive_time` alignment.
+
+### H. Data Integrity Validation
+
+* **Local Locking Scans (`validate`)**: The `db.collection.validate()` command scans for physical file corruption and missing BSON structures (`checkBSONConformance`). However, it imposes an exclusive write lock that completely halts application traffic on the collection. MongoDB 8.2 introduced `repairMode` telemetry for automatic non-fatal anomaly repairs.
+* **Distributed Consistency Scans (`dbCheck`)**: For cross-replica consistency auditing without severe locking, the internal `dbCheck` command runs in the background, computing cryptographic hashes across data-bearing members. Findings are logged to the `local.system.healthlog` collection. CPU impact is tunable via parameters like `dbCheckMaxTotalIndexKeysPerSnapshot`.
+
+### I. Configuration Auditing
+
+* **Parameter Integrity**: Utilizing the `getCmdLineOpts` command allows performance engineers and security teams to verify that critical optimizations (e.g., `--wiredTigerCacheSizeGB`) and Security Information and Event Management (SIEM) audit filters were perfectly loaded at startup without environment variable conflicts, satisfying stringent regulatory frameworks like PCI-DSS.
