@@ -310,6 +310,179 @@ An array of objects, one for each scanned collection. Each object contains:
 
 ---
 
+## Detailed Metrics & MongoDB Commands Reference
+
+This section provides an exhaustive catalog of every metric collected by `mongo-schema-fetch`, documenting the exact MongoDB commands executed, target namespaces, driver commands, fallbacks, and security sanitizations.
+
+### 1. Server Context Metrics (`serverContext`)
+
+#### Build & Version Information (`buildInfo`)
+* **MongoDB Command**: `{ buildInfo: 1 }` (executed via `adminDb.command({ buildInfo: 1 })`)
+* **Target Namespace**: `admin` database (administrative privileges required).
+* **Extracted Properties**:
+  * `version`: Semantic database version (e.g. `"7.0.8"`).
+  * `gitVersion`: The Git revision hash of the compiled binary.
+  * `versionArray`: Major/minor release numbers array.
+  * `bits`: Platform bits architecture (`64`).
+* **Optimization Value**: Identifies the engine version to enable or disable version-specific optimizer planning (e.g. legacy query hash filters are deprecated starting in MongoDB 8.0).
+* **Fallback**: Returns an empty object `{}` on permission/execution failures.
+
+#### Host & Hardware Specifications (`hostInfo`)
+* **MongoDB Command**: `{ hostInfo: 1 }` (executed via `adminDb.command({ hostInfo: 1 })`)
+* **Target Namespace**: `admin` database.
+* **Extracted Properties**:
+  * `os`: Host operating system metadata (`type`, `name`, `version`).
+  * `system`: CPU architecture, memory limits, and physical core counts.
+* **Zero Data Leak Sanitization**:
+  * Deletes `hostInfo.system.hostname` to prevent exposing network architecture details.
+  * Deletes the entire `hostInfo.extra` object to strip hardware details like exact processor models.
+* **Optimization Value**: Used to evaluate machine capacity and align query execution parallelism limits.
+* **Fallback**: Returns an empty object `{}` on permission/execution failures.
+
+#### CPU Architecture (`cpuArch`)
+* **MongoDB Command**: Extracted from `hostInfo.system.cpuArch` (queried via `{ hostInfo: 1 }` command).
+* **Target Namespace**: `admin` database.
+* **Optimization Value**: Identifies physical architecture constraints.
+* **Fallback**: Left undefined if `hostInfo` fails.
+
+#### Total Memory (`memSizeMB`)
+* **MongoDB Command**: Extracted from `hostInfo.system.memSizeMB` (queried via `{ hostInfo: 1 }` command).
+* **Target Namespace**: `admin` database.
+* **Optimization Value**: Used to determine the overall memory size limits of the host machine.
+* **Fallback**: Left undefined if `hostInfo` fails.
+
+#### Number of Processors (`numProcessors`)
+* **MongoDB Command**: Extracted from `hostInfo.system.numProcessors` (queried via `{ hostInfo: 1 }` command).
+* **Target Namespace**: `admin` database.
+* **Optimization Value**: Evaluates logical processor core counts to estimate thread scheduling.
+* **Fallback**: Left undefined if `hostInfo` fails.
+
+#### WiredTiger Cache Limit (`wiredTigerCacheBytes`)
+* **MongoDB Command**: `{ serverStatus: 1 }` (executed via `adminDb.command({ serverStatus: 1 })`)
+* **Target Namespace**: `admin` database.
+* **Extracted Path**: `serverStatus.wiredTiger.cache["maximum bytes configured"]`.
+* **Optimization Value**: Identifies the memory threshold of the storage engine. If index sizes exceed this, the query engine triggers disk page faults.
+* **Fallback**: Left undefined if `serverStatus` fails.
+
+#### Concurrent Transactions (`concurrentTransactions`)
+* **MongoDB Command**: `{ serverStatus: 1 }` (executed via `adminDb.command({ serverStatus: 1 })`)
+* **Target Namespace**: `admin` database.
+* **Extracted Path**: `serverStatus.wiredTiger.concurrentTransactions` (includes read/write `available` and `out` ticket counts).
+* **Optimization Value**: A drop in available tickets indicates thread concurrency exhaustion, pinpointing active resource bottlenecks.
+* **Fallback**: Left undefined if `serverStatus` fails.
+
+#### Cache Dirty Ratio (`cacheDirtyRatio`)
+* **MongoDB Command**: Calculated dynamically from serverStatus cache telemetry:
+  $$\text{cacheDirtyRatio} = \frac{\text{wiredTiger.cache["tracked dirty bytes in the cache"]}}{\text{wiredTiger.cache["maximum bytes configured"]}} \times 100$$
+* **Target Namespace**: `admin` database.
+* **Optimization Value**: Ratios exceeding 5% indicate that the storage engine's write queues are lagging behind application updates.
+* **Fallback**: Left undefined if cache telemetry is missing.
+
+#### Eviction Pressure (`pagesEvictedByApp`)
+* **MongoDB Command**: `{ serverStatus: 1 }` (executed via `adminDb.command({ serverStatus: 1 })`)
+* **Target Namespace**: `admin` database.
+* **Extracted Path**: `serverStatus.wiredTiger.cache["pages evicted by application threads"]`.
+* **Optimization Value**: Non-zero values identify high storage stress where client connections are forced to clear cache pages, resulting in query stall warnings.
+* **Fallback**: Left undefined if `serverStatus` fails.
+
+---
+
+### 2. Collection-Level Metrics (`collections[]`)
+
+#### Collection Name (`name`)
+* **MongoDB Method**: `db.listCollections().toArray()`
+* **Target Namespace**: Target database.
+* **Details**: Filters out all internal system collections (e.g. names starting with `system.`).
+* **Optimization Value**: Maps telemetry data to target collections.
+
+#### Storage Model Type (`type`)
+* **MongoDB Command**: `{ listCollections: 1, filter: { name: collectionName } }` (executed via `db.listCollections({ name }).toArray()`)
+* **Target Namespace**: Target database.
+* **Extracted Property**: `type` (e.g. `"timeseries"`, `"view"`, `"collection"`).
+* **Optimization Value**: Drives optimizer strategies: disables index recommendations for views, prioritizes time-bucket layouts for timeseries, and sizes write constraints for capped collections.
+* **Fallback**: Left undefined if the metadata query fails.
+
+#### Storage Configuration Options (`options`)
+* **MongoDB Command**: `{ listCollections: 1, filter: { name: collectionName } }` (executed via `db.listCollections({ name }).toArray()`)
+* **Target Namespace**: Target database.
+* **Extracted Property**: `options` (excluding the `validator` field).
+* **Details**: Retrieves capped properties (size, max), timeseries structures (timeField, metaField), and clustered index definitions.
+* **Optimization Value**: Inspects storage properties to verify compression constraints.
+* **Fallback**: Left undefined if listing fails.
+
+#### Schema Validator Rules (`validator`)
+* **MongoDB Command**: `{ listCollections: 1, filter: { name: collectionName } }` (executed via `db.listCollections({ name }).toArray()`)
+* **Target Namespace**: Target database.
+* **Extracted Property**: `options.validator` (decoupled from the options object to present a clean structure).
+* **Optimization Value**: Audits database-enforced schemas to recommend model changes or verify index constraints.
+* **Fallback**: Left undefined if listing fails.
+
+#### Precise Document Count (`count`)
+* **MongoDB Command**: `{ collStats: collectionName }` (executed via `db.command({ collStats: collectionName })`)
+* **Target Namespace**: Target database.
+* **Fallback Method**: Runs `coll.countDocuments()` if `collStats` is blocked by permissions.
+* **Optimization Value**: Serves as the database sizing baseline to score query plans.
+
+#### Estimated Document Count (`estimatedDocumentCount`)
+* **MongoDB Method**: `coll.estimatedDocumentCount()`
+* **Target Namespace**: Target database.
+* **Optimization Value**: Instantly returns metadata counts without scanning collections.
+* **Fallback**: Defaults to `0` on permission failure.
+
+#### Average Document Size (`avgObjSize`)
+* **MongoDB Command**: `{ collStats: collectionName }` (executed via `db.command({ collStats: collectionName })`)
+* **Target Namespace**: Target database.
+* **Optimization Value**: Used for OOM prevention (dynamic sampling limit size decreases for large documents).
+* **Fallback**: Defaults to `0` if `collStats` fails.
+
+#### Combined Index Size (`totalIndexSize`)
+* **MongoDB Command**: `{ collStats: collectionName }` (executed via `db.command({ collStats: collectionName })`)
+* **Target Namespace**: Target database.
+* **Optimization Value**: Compares active index size allocation against cache parameters.
+* **Fallback**: Defaults to `0` if `collStats` fails.
+
+#### Execution Plan Cache (`planCache`)
+* **MongoDB Aggregation Stage**: `coll.aggregate([{ $planCacheStats: {} }]).toArray()`
+* **Target Namespace**: Target collection (only executed when `--additional` is active).
+* **Optimization Value**: Audits active execution plan histories, identifying plan caching leaks and bad plans.
+* **Fallback**: Returns undefined if the aggregation fails or is unsupported.
+
+#### Latency Histograms (`latencyStats`)
+* **MongoDB Aggregation Stage**: `coll.aggregate([{ $collStats: { latencyStats: { histograms: true } } }]).toArray()`
+* **Target Namespace**: Target collection (only executed when `--additional` is active).
+* **Extracted Path**: The nested `latencyStats` property from the returned stats document.
+* **Optimization Value**: Buckets write, read, and command operations in execution time histograms to expose latency spikes.
+* **Fallback**: Returns undefined on permission/unsupported errors.
+
+#### Index Definitions (`indexes`)
+* **MongoDB Method**: `coll.indexes()` (runs `listIndexes` command).
+* **Target Namespace**: Target collection.
+* **Extracted Properties**: Full index keys, properties (unique, sparse), and partial filter expressions.
+* **Optimization Value**: Pinpoints missing compound indexes, sort ordering, and redundant index prefixes.
+* **Fallback**: Returns an empty array `[]` on privilege failure.
+
+#### Index Access Usage (`indexStats`)
+* **MongoDB Aggregation Stage**: `coll.aggregate([{ $indexStats: {} }]).toArray()`
+* **Target Namespace**: Target collection.
+* **Extracted Properties**: Access counts (`accesses.ops`, `accesses.since`), and node `host` strings.
+* **Zero Data Leak Sanitization**:
+  * Mask replica set hosts and IPs symbolically (e.g. `node_1:27017`) deterministically to prevent physical network topology leakage.
+* **Optimization Value**: Identifies unused indexes to improve write performance by removing them.
+* **Fallback**: Returns an empty array `[]` on privilege failure.
+
+#### Probabilistic Inferred Schema (`schema`)
+* **MongoDB Query/Aggregation**:
+  * If `count <= limit`: `coll.find({}, { maxTimeMS: 5000 })`
+  * If `count > limit`: `coll.aggregate([{ $sample: { size: limit } }], { maxTimeMS: 5000 })`
+* **Details**: Steam cursor is converted to a Node.js Readable stream directly into `mongodb-schema` to prevent loading all documents into memory.
+* **Zero Data Leak Sanitization**:
+  * Strips the `values` array from all types.
+  * Preserves string/number enums only under the `--enum-threshold` (cardinality limit) and filters out string enums longer than 100 characters.
+* **Optimization Value**: Drives structural schema models, subdocument hierarchies, and data type optimizations.
+* **Fallback**: Fails gracefully if the query cannot execute.
+
+---
+
 ## Testing
 
 This project includes a comprehensive test suite covering unit operations, CLI parsing, and real database integration tests using Docker containers. For a full mapping of core use cases to testing suites, see the [TEST_CASES.md](file:///Users/ivan/Project/3t.tools.intellij/mongo/mongo-schema-fetch/TEST_CASES.md) document.
