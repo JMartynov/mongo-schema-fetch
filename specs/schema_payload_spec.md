@@ -67,7 +67,13 @@ Provides the environment context of the profiled database. This is critical for 
   "cpuArch": "x86_64",
   "memSizeMB": 16384,
   "numProcessors": 8,
-  "wiredTigerCacheBytes": 8589934592
+  "wiredTigerCacheBytes": 8589934592,
+  "concurrentTransactions": {
+    "read": { "available": 128, "out": 0 },
+    "write": { "available": 128, "out": 0 }
+  },
+  "cacheDirtyRatio": 0.45,
+  "pagesEvictedByApp": 0
 }
 ```
 
@@ -106,7 +112,33 @@ Contains database storage and size statistics for the collection. If the `collSt
   "count": 1500,
   "estimatedDocumentCount": 1500,
   "avgObjSize": 182,
-  "totalIndexSize": 81920
+  "totalIndexSize": 81920,
+  "type": "collection",
+  "options": {},
+  "validator": {
+    "$jsonSchema": {
+      "bsonType": "object",
+      "required": ["email"],
+      "properties": {
+        "email": {
+          "bsonType": "string",
+          "description": "must be a string and is required"
+        }
+      }
+    }
+  },
+  "planCache": [
+    {
+      "planCacheShapeHash": "A1B2C3D4",
+      "isActive": true,
+      "works": 42
+    }
+  ],
+  "latencyStats": {
+    "reads": { "latency": 15200, "ops": 120 },
+    "writes": { "latency": 45000, "ops": 250 },
+    "commands": { "latency": 0, "ops": 0 }
+  }
 }
 ```
 
@@ -202,7 +234,30 @@ Below is an annotated example of a generated `schema-payload.json` file highligh
       "versionArray": [7, 0, 8, 0],
       "bits": 64,
       "ok": 1
-    }
+    },
+    "hostInfo": {
+      "system": {
+        "cpuAddrSize": 64,
+        "memSizeMB": 16384,
+        "numProcessors": 8,
+        "cpuArch": "x86_64"
+      },
+      "os": {
+        "type": "Darwin",
+        "name": "Mac OS X",
+        "version": "14.4"
+      }
+    },
+    "cpuArch": "x86_64",
+    "memSizeMB": 16384,
+    "numProcessors": 8,
+    "wiredTigerCacheBytes": 8589934592,
+    "concurrentTransactions": {
+      "read": { "available": 128, "out": 0 },
+      "write": { "available": 128, "out": 0 }
+    },
+    "cacheDirtyRatio": 0.45,
+    "pagesEvictedByApp": 0
   },
   "collections": [
     {
@@ -211,7 +266,32 @@ Below is an annotated example of a generated `schema-payload.json` file highligh
         "count": 12000,
         "estimatedDocumentCount": 12000,
         "avgObjSize": 250,
-        "totalIndexSize": 81920
+        "totalIndexSize": 81920,
+        "type": "collection",
+        "options": {},
+        "validator": {
+          "$jsonSchema": {
+            "bsonType": "object",
+            "required": ["role"],
+            "properties": {
+              "role": {
+                "bsonType": "string"
+              }
+            }
+          }
+        },
+        "planCache": [
+          {
+            "planCacheShapeHash": "A1B2C3D4",
+            "isActive": true,
+            "works": 42
+          }
+        ],
+        "latencyStats": {
+          "reads": { "latency": 15200, "ops": 120 },
+          "writes": { "latency": 45000, "ops": 250 },
+          "commands": { "latency": 0, "ops": 0 }
+        }
       },
       "indexes": {
         "name": "users",
