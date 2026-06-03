@@ -15,7 +15,10 @@ const schemaPayloadSchema = {
         cpuArch: { type: "string" },
         memSizeMB: { type: "number" },
         numProcessors: { type: "number" },
-        wiredTigerCacheBytes: { type: "number" }
+        wiredTigerCacheBytes: { type: "number" },
+        concurrentTransactions: { type: "object" },
+        cacheDirtyRatio: { type: "number" },
+        pagesEvictedByApp: { type: "number" }
       },
       required: ["buildInfo"]
     },
@@ -31,7 +34,12 @@ const schemaPayloadSchema = {
               count: { type: "number" },
               estimatedDocumentCount: { type: "number" },
               avgObjSize: { type: "number" },
-              totalIndexSize: { type: "number" }
+              totalIndexSize: { type: "number" },
+              type: { type: "string" },
+              options: { type: "object" },
+              validator: { type: "object" },
+              planCache: { type: "array" },
+              latencyStats: { type: "object" }
             },
             required: ["name", "count", "estimatedDocumentCount", "avgObjSize", "totalIndexSize"]
           },

@@ -5,6 +5,12 @@ export interface ServerContext {
   memSizeMB?: number;
   numProcessors?: number;
   wiredTigerCacheBytes?: number;
+  concurrentTransactions?: {
+    read?: { available?: number; out?: number };
+    write?: { available?: number; out?: number };
+  };
+  cacheDirtyRatio?: number;
+  pagesEvictedByApp?: number;
 }
 
 export interface CollectionStats {
@@ -13,6 +19,11 @@ export interface CollectionStats {
   estimatedDocumentCount: number;
   avgObjSize: number;
   totalIndexSize: number;
+  type?: string;
+  options?: any;
+  validator?: any;
+  planCache?: any[];
+  latencyStats?: any;
 }
 
 export interface CollectionIndexes {

@@ -25,6 +25,9 @@ export async function fetchServerContext(db: Db): Promise<ServerContext> {
   let memSizeMB: number | undefined;
   let numProcessors: number | undefined;
   let wiredTigerCacheBytes: number | undefined;
+  let concurrentTransactions: any = undefined;
+  let cacheDirtyRatio: number | undefined;
+  let pagesEvictedByApp: number | undefined;
 
   try {
     buildInfo = await adminDb.command({ buildInfo: 1 });
@@ -55,10 +58,35 @@ export async function fetchServerContext(db: Db): Promise<ServerContext> {
 
   try {
     const serverStatus = await adminDb.command({ serverStatus: 1 });
-    if (serverStatus && serverStatus.wiredTiger && serverStatus.wiredTiger.cache) {
-      const maxBytes = serverStatus.wiredTiger.cache['maximum bytes configured'];
-      if (typeof maxBytes === 'number') {
-        wiredTigerCacheBytes = maxBytes;
+    if (serverStatus && serverStatus.wiredTiger) {
+      if (serverStatus.wiredTiger.cache) {
+        const maxBytes = serverStatus.wiredTiger.cache['maximum bytes configured'];
+        if (typeof maxBytes === 'number') {
+          wiredTigerCacheBytes = maxBytes;
+        }
+
+        const dirtyBytes = serverStatus.wiredTiger.cache['tracked dirty bytes in the cache'];
+        if (typeof dirtyBytes === 'number' && typeof maxBytes === 'number' && maxBytes > 0) {
+          cacheDirtyRatio = (dirtyBytes / maxBytes) * 100;
+        }
+
+        const evicted = serverStatus.wiredTiger.cache['pages evicted by application threads'];
+        if (typeof evicted === 'number') {
+          pagesEvictedByApp = evicted;
+        }
+      }
+
+      if (serverStatus.wiredTiger.concurrentTransactions) {
+        concurrentTransactions = {
+          read: {
+            available: serverStatus.wiredTiger.concurrentTransactions.read?.available,
+            out: serverStatus.wiredTiger.concurrentTransactions.read?.out
+          },
+          write: {
+            available: serverStatus.wiredTiger.concurrentTransactions.write?.available,
+            out: serverStatus.wiredTiger.concurrentTransactions.write?.out
+          }
+        };
       }
     }
   } catch (err: any) {
@@ -71,7 +99,10 @@ export async function fetchServerContext(db: Db): Promise<ServerContext> {
     cpuArch,
     memSizeMB,
     numProcessors,
-    wiredTigerCacheBytes
+    wiredTigerCacheBytes,
+    concurrentTransactions,
+    cacheDirtyRatio,
+    pagesEvictedByApp
   };
 }
 
@@ -80,7 +111,11 @@ export async function getCollectionNames(db: Db): Promise<string[]> {
   return collections.map(c => c.name).filter(name => !name.startsWith('system.'));
 }
 
-export async function fetchCollectionStats(db: Db, collectionName: string): Promise<CollectionStats> {
+export async function fetchCollectionStats(
+  db: Db,
+  collectionName: string,
+  options?: { additional?: boolean }
+): Promise<CollectionStats> {
   const coll = db.collection(collectionName);
 
   let stats: any = {};
@@ -95,12 +130,56 @@ export async function fetchCollectionStats(db: Db, collectionName: string): Prom
   const avgObjSize = stats.avgObjSize ?? 0;
   const totalIndexSize = stats.totalIndexSize ?? 0;
 
+  let type: string | undefined = undefined;
+  let collectionOpts: any = undefined;
+  let validator: any = undefined;
+
+  try {
+    const list = await db.listCollections({ name: collectionName }).toArray();
+    if (list && list.length > 0) {
+      const info = list[0] as any;
+      type = info.type;
+      collectionOpts = { ...info.options };
+      if (collectionOpts && collectionOpts.validator) {
+        validator = collectionOpts.validator;
+        delete collectionOpts.validator;
+      }
+    }
+  } catch (err: any) {
+    console.warn(`⚠️ Could not fetch collection metadata for ${collectionName}:`, err.message);
+  }
+
+  let planCache: any[] | undefined = undefined;
+  let latencyStats: any = undefined;
+
+  if (options?.additional) {
+    try {
+      planCache = await coll.aggregate([{ $planCacheStats: {} }]).toArray();
+    } catch (err: any) {
+      console.warn(`⚠️ Could not fetch $planCacheStats for ${collectionName}:`, err.message);
+    }
+
+    try {
+      const collStatsAgg = await coll.aggregate([{ $collStats: { latencyStats: { histograms: true } } }]).toArray();
+      if (collStatsAgg && collStatsAgg.length > 0 && collStatsAgg[0].latencyStats) {
+        latencyStats = collStatsAgg[0].latencyStats;
+      }
+    } catch (err: any) {
+      console.warn(`⚠️ Could not fetch $collStats latency for ${collectionName}:`, err.message);
+    }
+  }
+
   return {
     name: collectionName,
     count,
     estimatedDocumentCount,
     avgObjSize,
-    totalIndexSize
+    totalIndexSize,
+    type,
+    options: collectionOpts,
+    validator,
+    planCache,
+    latencyStats
   };
 }
 

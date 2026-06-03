@@ -67,7 +67,13 @@ describe('DB Operations (Mocked)', () => {
                     if (cmd.serverStatus) return Promise.resolve({
                         wiredTiger: {
                             cache: {
-                                "maximum bytes configured": 8589934592
+                                "maximum bytes configured": 10000,
+                                "tracked dirty bytes in the cache": 2000,
+                                "pages evicted by application threads": 150
+                            },
+                            concurrentTransactions: {
+                                read: { available: 120, out: 8 },
+                                write: { available: 110, out: 18 }
                             }
                         }
                     });
@@ -80,7 +86,13 @@ describe('DB Operations (Mocked)', () => {
         expect(ctx.cpuArch).toBe("x86_64");
         expect(ctx.memSizeMB).toBe(16384);
         expect(ctx.numProcessors).toBe(8);
-        expect(ctx.wiredTigerCacheBytes).toBe(8589934592);
+        expect(ctx.wiredTigerCacheBytes).toBe(10000);
+        expect(ctx.cacheDirtyRatio).toBe(20);
+        expect(ctx.pagesEvictedByApp).toBe(150);
+        expect(ctx.concurrentTransactions).toEqual({
+            read: { available: 120, out: 8 },
+            write: { available: 110, out: 18 }
+        });
         
         // Assert sanitization
         expect(ctx.hostInfo).toBeDefined();
@@ -125,6 +137,53 @@ describe('DB Operations (Mocked)', () => {
         expect(stats.estimatedDocumentCount).toBe(12);
         expect(stats.avgObjSize).toBe(0);
         expect(stats.totalIndexSize).toBe(0);
+    });
+
+    it('fetchCollectionStats should extract collection metadata and diagnostic stats under --additional', async () => {
+        const mockColl = {
+            countDocuments: () => Promise.resolve(100),
+            estimatedDocumentCount: () => Promise.resolve(100),
+            aggregate: vi.fn().mockImplementation((pipeline) => {
+                if (pipeline[0].$planCacheStats) {
+                    return {
+                        toArray: () => Promise.resolve([{ queryHash: "A1B2", planCacheKey: "C3D4" }])
+                    };
+                }
+                if (pipeline[0].$collStats && pipeline[0].$collStats.latencyStats) {
+                    return {
+                        toArray: () => Promise.resolve([{ latencyStats: { reads: { latency: 500, ops: 200 } } }])
+                    };
+                }
+                return { toArray: () => Promise.resolve([]) };
+            })
+        };
+        const mockDb = {
+            command: vi.fn().mockResolvedValue({ count: 100, avgObjSize: 150, totalIndexSize: 4096 }),
+            collection: () => mockColl,
+            listCollections: vi.fn().mockImplementation((filter) => {
+                if (filter && filter.name === "users") {
+                    return {
+                        toArray: () => Promise.resolve([{
+                            name: "users",
+                            type: "timeseries",
+                            options: {
+                                timeseries: { timeField: "timestamp", metaField: "metadata" },
+                                validator: { $jsonSchema: { required: ["timestamp"] } }
+                            }
+                        }])
+                    };
+                }
+                return { toArray: () => Promise.resolve([]) };
+            })
+        } as any;
+
+        const stats = await fetchCollectionStats(mockDb, "users", { additional: true });
+        expect(stats.name).toBe("users");
+        expect(stats.type).toBe("timeseries");
+        expect(stats.options).toEqual({ timeseries: { timeField: "timestamp", metaField: "metadata" } });
+        expect(stats.validator).toEqual({ $jsonSchema: { required: ["timestamp"] } });
+        expect(stats.planCache).toEqual([{ queryHash: "A1B2", planCacheKey: "C3D4" }]);
+        expect(stats.latencyStats).toEqual({ reads: { latency: 500, ops: 200 } });
     });
 
     beforeEach(() => {

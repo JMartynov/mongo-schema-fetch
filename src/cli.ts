@@ -25,6 +25,7 @@ program
   .option('--quiet', 'Disable all interactive prompts (CI/CD mode)')
   .option('--query-file <path>', 'Path to a JSON file containing the query to analyze')
   .option('--auto-analyze', 'Automatically send the schema and query to the API and exit based on results')
+  .option('--additional', 'Collect additional plan cache and latency stats', false)
   .action(async (uri, options) => {
     if (options.autoAnalyze && !options.queryFile) {
       console.error("❌ Error: --query-file must be provided when using --auto-analyze");
@@ -72,7 +73,7 @@ program
 
         console.log(`  -> Processing: ${collName}`);
 
-        const stats = await fetchCollectionStats(db, collName);
+        const stats = await fetchCollectionStats(db, collName, { additional: options.additional });
         const indexes = await fetchCollectionIndexes(db, collName);
         const schema = await inferSchema(db, collName, stats.avgObjSize, options.sample, options.enumThreshold);
 

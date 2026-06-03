@@ -37,6 +37,9 @@ Provides the environment context of the profiled database. This is critical for 
 - `memSizeMB` (Number, **Optional**): The total host memory size in Megabytes extracted from `hostInfo`.
 - `numProcessors` (Number, **Optional**): The number of physical or logical CPU cores/processors extracted from `hostInfo`.
 - `wiredTigerCacheBytes` (Number, **Optional**): The engine-level configured maximum memory cache in bytes extracted from `serverStatus.wiredTiger.cache`.
+- `concurrentTransactions` (Object, **Optional**): Contains `read` and `write` concurrency ticket profiles (out and available slots).
+- `cacheDirtyRatio` (Number, **Optional**): Percentage ratio of tracked dirty bytes in cache to the total cache capacity.
+- `pagesEvictedByApp` (Number, **Optional**): Cumulative pages evicted by application client threads under high storage pressure.
 
 ### Example
 ```json
@@ -90,6 +93,11 @@ Contains database storage and size statistics for the collection. If the `collSt
 - `estimatedDocumentCount` (Number, **Required**): Fast metadata document count.
 - `avgObjSize` (Number, **Required**): Average document size in bytes. Used by the utility to determine dynamic sampling limits.
 - `totalIndexSize` (Number, **Required**): Cumulative size of all collection indexes in bytes.
+- `type` (String, **Optional**): The collection storage type (e.g. `"collection"`, `"view"`, `"timeseries"`).
+- `options` (Object, **Optional**): Metadata options from the collection configuration (e.g., capped constraints, timeseries specifications, clustered index details).
+- `validator` (Object, **Optional**): Database-enforced schema validations (like `$jsonSchema` validators).
+- `planCache` (Array, **Optional**): Cached execution plans retrieved from the engine (only populated under `--additional`).
+- `latencyStats` (Object, **Optional**): Read/write latency histograms detailing operational response times (only populated under `--additional`).
 
 #### Example
 ```json
