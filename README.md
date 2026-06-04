@@ -63,7 +63,8 @@ If you have multiple collections, this will launch an interactive prompt asking 
 | `--all-collections` | Force scan **all** collections in the database. Skips the interactive prompt. | `false` |
 | `--out <path>` | File path where the generated JSON payload will be saved. | `schema-payload.json` |
 | `--sample <number>` | Custom document sample limit for schema inference. Overrides the smart dynamic limit. | Dynamic (50-1000) |
-| `--enum-threshold <number>` | Threshold limit for saving enum values. If unique values in a field are below this number, they are saved. | `20` |
+| `--enum-threshold <number>` | Threshold limit for saving enum values. If unique values in a field are below this number, they are saved. Only active when `--store-values` is enabled. | `20` |
+| `--store-values` | Enable value collection and enum extraction. By default, value collection is disabled for safety. | `false` |
 | `--read-preference <mode>` | Specify read preference (e.g., `secondary`) for Replica Sets to avoid burdening the primary node. | None |
 | `--quiet` | Disable all interactive prompts and "Magic Link" upload requests. Essential for CI/CD environments. | `false` |
 | `--additional` | Enable collection of advanced execution query plan cache stats (`$planCacheStats`) and latency histograms (`$collStats`). | `false` |
@@ -143,9 +144,11 @@ To enforce this guarantee, the sanitization pipeline applies the following multi
    - The underlying inference engine (`mongodb-schema`) compiles an array of real data samples (`values`) to analyze types.
    - The utility **forcibly deletes** the raw `values` array for every field and nested type descriptor. No original data is saved.
 2. **Low-Cardinality Enum Guard**:
-   - Safe enum values are only preserved for `"String"` and `"Number"` types.
-   - Enums are only populated if the total unique count is less than `--enum-threshold` (default `20`).
-   - Any string value exceeding **100 characters** is immediately discarded to prevent capturing long text blocks, comments, or private descriptions.
+   - Enums and data value collection are disabled by default (`storeValues: false`).
+   - If `--store-values` is explicitly enabled:
+     - Safe enum values are only preserved for `"String"` and `"Number"` types.
+     - Enums are only populated if the total unique count is less than `--enum-threshold` (default `20`).
+     - Any string value exceeding **100 characters** is immediately discarded to prevent capturing long text blocks, comments, or private descriptions.
 3. **Infrastructure Metadata Sanitization**:
    - Server context queries are stripped of hostnames (`hostInfo.system.hostname`) and platform detail keys (`hostInfo.extra`) to prevent leaking internal network topologies.
    - Replica set member names inside index stats are symbolically masked (e.g. `node_1:27017`) to keep physical IP addresses and domains private.
@@ -169,7 +172,7 @@ The generated JSON file adheres to a strict contract validated by JSON Schema (A
 
 ### Invariants Guarantee
 1. **Zero Raw Values**: With the exception of low-cardinality short string Enums, absolutely no actual values from the database are stored. `values` arrays from `mongodb-schema` are forcibly deleted.
-2. **Safe Enumerations**: String and Number values are only retained if the number of unique occurrences is less than the `--enum-threshold` (default 20). Furthermore, string enums are discarded if they exceed 100 characters in length.
+2. **Safe Enumerations**: If `--store-values` is enabled, string and number values are only retained if the number of unique occurrences is less than the `--enum-threshold` (default 20). Otherwise, no enums are stored at all by default. String enums are discarded if they exceed 100 characters in length.
 3. **Validated Contract**: The tool halts with an error if the output does not strictly match the expected JSON schema.
 
 ### JSON Payload Structure
