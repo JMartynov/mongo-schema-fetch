@@ -15,16 +15,92 @@ vi.mock('mongodb', () => {
 });
 
 describe('DB Operations (Mocked)', () => {
-    it('connectToDb should pass correct timeouts and readPreference', async () => {
+    it('connectToDb should pass correct timeouts and readPreference as string', async () => {
         const { client, db } = await connectToDb('mongodb://localhost', 'secondary');
         
         expect(MongoClient).toHaveBeenCalledWith('mongodb://localhost', {
             serverSelectionTimeoutMS: 5000,
             connectTimeoutMS: 10000,
-            readPreference: 'secondary'
+            readPreference: 'secondary',
+            appName: 'mongo-schema-fetch'
         });
         expect(client.connect).toHaveBeenCalled();
         expect(client.db).toHaveBeenCalled();
+    });
+
+    it('connectToDb should map full ConnectionOptions to MongoClientOptions', async () => {
+        const connOpts = {
+            readPreference: 'secondaryPreferred',
+            username: 'my-user',
+            password: 'my-password',
+            authSource: 'admin',
+            authMechanism: 'SCRAM-SHA-256',
+            authMechanismProperties: 'SERVICE_NAME:mongodb,CANONICALIZE_HOST_NAME:true',
+            tls: true,
+            tlsCAFile: '/path/to/ca.pem',
+            tlsCertificateKeyFile: '/path/to/client.pem',
+            tlsCertificateKeyFilePassword: 'cert-password',
+            tlsAllowInvalidCertificates: true,
+            tlsAllowInvalidHostnames: false,
+            connectTimeoutMS: 8000,
+            socketTimeoutMS: 15000,
+            serverSelectionTimeoutMS: 3000,
+            maxIdleTimeMS: 60000,
+            maxPoolSize: 50,
+            minPoolSize: 5,
+            appName: 'custom-app',
+            retryWrites: true,
+            retryReads: false,
+            directConnection: true,
+            loadBalanced: false,
+            compressors: ['snappy', 'zstd'],
+            w: 'majority',
+            journal: true,
+            wtimeoutMS: 2000,
+            readConcernLevel: 'majority',
+        };
+        const { client } = await connectToDb('mongodb://localhost', connOpts);
+
+        expect(MongoClient).toHaveBeenCalledWith('mongodb://localhost', {
+            serverSelectionTimeoutMS: 3000,
+            connectTimeoutMS: 8000,
+            appName: 'custom-app',
+            readPreference: 'secondaryPreferred',
+            auth: {
+                username: 'my-user',
+                password: 'my-password',
+            },
+            authSource: 'admin',
+            authMechanism: 'SCRAM-SHA-256',
+            authMechanismProperties: {
+                SERVICE_NAME: 'mongodb',
+                CANONICALIZE_HOST_NAME: 'true',
+            },
+            tls: true,
+            tlsCAFile: '/path/to/ca.pem',
+            tlsCertificateKeyFile: '/path/to/client.pem',
+            tlsCertificateKeyFilePassword: 'cert-password',
+            tlsAllowInvalidCertificates: true,
+            tlsAllowInvalidHostnames: false,
+            socketTimeoutMS: 15000,
+            maxIdleTimeMS: 60000,
+            maxPoolSize: 50,
+            minPoolSize: 5,
+            retryWrites: true,
+            retryReads: false,
+            directConnection: true,
+            loadBalanced: false,
+            compressors: ['snappy', 'zstd'],
+            writeConcern: {
+                w: 'majority',
+                journal: true,
+                wtimeoutMS: 2000,
+            },
+            readConcern: {
+                level: 'majority',
+            },
+        });
+        expect(client.connect).toHaveBeenCalled();
     });
 
     it('fetchServerContext should handle permissions errors gracefully', async () => {

@@ -8,6 +8,7 @@ import { promptForCollections } from './interactive.js';
 import { promptAndUploadMagicLink, autoAnalyze } from './upload.js';
 import fs from 'fs';
 import path from 'path';
+import prompts from 'prompts';
 
 const program = new Command();
 
@@ -26,6 +27,37 @@ program
   .option('--query-file <path>', 'Path to a JSON file containing the query to analyze')
   .option('--auto-analyze', 'Automatically send the schema and query to the API and exit based on results')
   .option('--additional', 'Collect additional plan cache and latency stats', false)
+  .option('-u, --username <username>', 'MongoDB username')
+  .option('-p, --password [password]', 'MongoDB password')
+  .option('--auth-source <database>', 'Database containing user credentials')
+  .option('--auth-mechanism <mechanism>', 'Authentication mechanism')
+  .option('--auth-mechanism-properties <properties>', 'Authentication mechanism properties')
+  .option('--tls', 'Enable TLS/SSL connection')
+  .option('--tls-ca-file <path>', 'Path to the CA certificate file')
+  .option('--tls-certificate-key-file <path>', 'Path to the client PEM certificate key file')
+  .option('--tls-certificate-key-file-password <password>', 'Password for the client certificate key file')
+  .option('--tls-allow-invalid-certificates', 'Allow invalid certificates (insecure)')
+  .option('--tls-allow-invalid-hostnames', 'Allow invalid hostnames in certificates (insecure)')
+  .option('--connect-timeout-ms <ms>', 'Connection timeout in milliseconds')
+  .option('--socket-timeout-ms <ms>', 'Socket timeout in milliseconds')
+  .option('--server-selection-timeout-ms <ms>', 'Server selection timeout in milliseconds')
+  .option('--max-idle-time-ms <ms>', 'Connection max idle time in pool')
+  .option('--max-pool-size <size>', 'Connection pool max size')
+  .option('--min-pool-size <size>', 'Connection pool min size')
+  .option('--app-name <name>', 'Application name identifier')
+  .option('--retry-writes', 'Enable retryable writes')
+  .option('--no-retry-writes', 'Disable retryable writes')
+  .option('--retry-reads', 'Enable retryable reads')
+  .option('--no-retry-reads', 'Disable retryable reads')
+  .option('--direct-connection', 'Force direct connection')
+  .option('--no-direct-connection', 'Do not force direct connection')
+  .option('--load-balanced', 'Enable load balanced topology')
+  .option('--compressors <list>', 'Comma-separated compression algorithms')
+  .option('--write-concern-w <w>', 'Write concern w parameter')
+  .option('--write-concern-j', 'Enable write concern journal parameter')
+  .option('--no-write-concern-j', 'Disable write concern journal parameter')
+  .option('--write-concern-wtimeout-ms <ms>', 'Write concern wtimeoutMS parameter')
+  .option('--read-concern-level <level>', 'Read concern level')
   .action(async (uri, options) => {
     if (options.autoAnalyze && !options.queryFile) {
       console.error("❌ Error: --query-file must be provided when using --auto-analyze");
@@ -33,7 +65,58 @@ program
     }
     let client;
     try {
-      const dbConnection = await connectToDb(uri, options.readPreference);
+      let password = options.password;
+      if (password === undefined) {
+        password = process.env.MONGODB_PASSWORD || process.env.MONGODB_PASS;
+      }
+      if (options.username && password === undefined && !options.quiet) {
+        const response = await prompts({
+          type: 'password',
+          name: 'pwd',
+          message: `Enter password for MongoDB user "${options.username}":`,
+        });
+        password = response.pwd;
+      }
+
+      let writeConcernW = options.writeConcernW;
+      if (writeConcernW !== undefined) {
+        if (/^\d+$/.test(writeConcernW)) {
+          writeConcernW = parseInt(writeConcernW, 10);
+        }
+      }
+
+      const connectionOptions = {
+        readPreference: options.readPreference,
+        username: options.username,
+        password,
+        authSource: options.authSource,
+        authMechanism: options.authMechanism,
+        authMechanismProperties: options.authMechanismProperties,
+        tls: options.tls,
+        tlsCAFile: options.tlsCaFile,
+        tlsCertificateKeyFile: options.tlsCertificateKeyFile,
+        tlsCertificateKeyFilePassword: options.tlsCertificateKeyFilePassword,
+        tlsAllowInvalidCertificates: options.tlsAllowInvalidCertificates,
+        tlsAllowInvalidHostnames: options.tlsAllowInvalidHostnames,
+        connectTimeoutMS: options.connectTimeoutMs !== undefined ? parseInt(options.connectTimeoutMs, 10) : undefined,
+        socketTimeoutMS: options.socketTimeoutMs !== undefined ? parseInt(options.socketTimeoutMs, 10) : undefined,
+        serverSelectionTimeoutMS: options.serverSelectionTimeoutMs !== undefined ? parseInt(options.serverSelectionTimeoutMs, 10) : undefined,
+        maxIdleTimeMS: options.maxIdleTimeMs !== undefined ? parseInt(options.maxIdleTimeMs, 10) : undefined,
+        maxPoolSize: options.maxPoolSize !== undefined ? parseInt(options.maxPoolSize, 10) : undefined,
+        minPoolSize: options.minPoolSize !== undefined ? parseInt(options.minPoolSize, 10) : undefined,
+        appName: options.appName,
+        retryWrites: options.retryWrites,
+        retryReads: options.retryReads,
+        directConnection: options.directConnection,
+        loadBalanced: options.loadBalanced,
+        compressors: options.compressors ? options.compressors.split(',').map((s: string) => s.trim()) : undefined,
+        w: writeConcernW,
+        journal: options.writeConcernJ,
+        wtimeoutMS: options.writeConcernWtimeoutMs !== undefined ? parseInt(options.writeConcernWtimeoutMs, 10) : undefined,
+        readConcernLevel: options.readConcernLevel,
+      };
+
+      const dbConnection = await connectToDb(uri, connectionOptions);
       client = dbConnection.client;
       let db = dbConnection.db;
 

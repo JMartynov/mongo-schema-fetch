@@ -65,6 +65,33 @@ If you have multiple collections, this will launch an interactive prompt asking 
 | `--read-preference <mode>` | Specify read preference (e.g., `secondary`) for Replica Sets to avoid burdening the primary node. | None |
 | `--quiet` | Disable all interactive prompts and "Magic Link" upload requests. Essential for CI/CD environments. | `false` |
 | `--additional` | Enable collection of advanced execution query plan cache stats (`$planCacheStats`) and latency histograms (`$collStats`). | `false` |
+| `-u, --username <username>` | MongoDB username. | None |
+| `-p, --password [password]` | MongoDB password. Will prompt securely if omitted, or fallback to environment variables `MONGODB_PASSWORD` or `MONGODB_PASS`. | None |
+| `--auth-source <database>` | Database containing user credentials. | `admin` (or URI DB) |
+| `--auth-mechanism <mechanism>` | Authentication mechanism (e.g. `SCRAM-SHA-256`, `MONGODB-X509`, `MONGODB-AWS`). | negotiated |
+| `--auth-mechanism-properties <props>` | Comma-separated authentication mechanism properties (e.g. `SERVICE_NAME:mongodb`). | None |
+| `--tls` | Enable TLS/SSL connection. | `false` |
+| `--tls-ca-file <path>` | Path to the CA certificate file. | None |
+| `--tls-certificate-key-file <path>` | Path to the client PEM certificate key file (for mutual TLS). | None |
+| `--tls-certificate-key-file-password <pwd>` | Password for the client certificate key file. | None |
+| `--tls-allow-invalid-certificates` | Bypass server TLS certificate checks (insecure, for local testing). | `false` |
+| `--tls-allow-invalid-hostnames` | Bypass server hostname mismatch checks (insecure, for local testing). | `false` |
+| `--connect-timeout-ms <ms>` | Connection timeout in milliseconds. | `10000` |
+| `--socket-timeout-ms <ms>` | Socket timeout in milliseconds. | None (infinite) |
+| `--server-selection-timeout-ms <ms>` | Server selection timeout in milliseconds. | `5000` |
+| `--max-idle-time-ms <ms>` | Connection max idle time in pool. | None |
+| `--max-pool-size <size>` | Connection pool max size. | None |
+| `--min-pool-size <size>` | Connection pool min size. | None |
+| `--app-name <name>` | Application name identifier visible in server logs. | `mongo-schema-fetch` |
+| `--retry-writes`, `--no-retry-writes` | Enable or disable retryable writes. | None |
+| `--retry-reads`, `--no-retry-reads` | Enable or disable retryable reads. | None |
+| `--direct-connection`, `--no-direct-connection` | Force direct connection (bypassing replica set discovery). | None |
+| `--load-balanced` | Enable load balanced topology. | `false` |
+| `--compressors <list>` | Comma-separated compression algorithms (e.g., `zlib,snappy,zstd`). | None |
+| `--write-concern-w <w>` | Write concern w parameter (e.g. `majority` or an integer). | None |
+| `--write-concern-j`, `--no-write-concern-j` | Enable or disable journal write concern. | None |
+| `--write-concern-wtimeout-ms <ms>` | Write concern wtimeoutMS parameter in milliseconds. | None |
+| `--read-concern-level <level>` | Read concern level (e.g., `local`, `majority`, `linearizable`). | None |
 | `-h, --help` | Display help for command. | |
 
 ### Use Case Examples
