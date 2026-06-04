@@ -4,19 +4,28 @@ This research document analyzes safety mechanisms for MongoDB schema extraction,
 
 ---
 
-## 1. Safety Analysis of Python MongoDB Schema Tools
+## 1. Safety Analysis of Open-Source MongoDB Schema Tools
 
-Several Python libraries exist for schema discovery and management, but they handle data in different ways:
+Several open-source libraries exist for schema discovery, but they handle data in different ways:
 
-### 1.1. `pymongo-schema` (Reverse-Engineering Tool)
+### 1.1. `pymongo-schema` (Python)
 *   **How it works**: Connects to the collection and pulls a sample of documents using `collection.find()` to analyze their keys and types in memory.
 *   **Leakage Risk**: **High**. Like `mongodb-schema`, it retrieves raw document values over the network and holds them in local client memory. It has no built-in masking or hashing mechanism.
 
-### 1.2. `mongo-analyser` (TUI & CLI Analyzer)
+### 1.2. `mongo-analyser` (Python)
 *   **How it works**: Uses sampling queries and runs analytics locally.
 *   **Leakage Risk**: **High**. Intended as a developer-facing tool, it explicitly prints sample values to the terminal to aid analysis, violating a Zero Data Leak Policy.
 
-### 1.3. Object-Document Mappers (ODMs) (`PyODMongo`, `MongoEngine`, `Ming`)
+### 1.3. `Variety` (JavaScript / MongoDB Shell Script)
+*   **How it works**: Executes a **MapReduce** job directly inside the MongoDB server process to iterate over all fields and their types.
+*   **Leakage Risk**: **Low (No client-side value transmission)**. Because the logic runs entirely on the database server, raw field values are not transmitted to the client. The client only receives the aggregated schema results.
+*   **Limitations**: Uses MapReduce which is deprecated in MongoDB 5.0+ in favor of aggregation pipelines. It writes temporary collections, requiring write access on the database, and is very resource-intensive on large collections.
+
+### 1.4. `izmailoff/MongoDB-Schema-Analyzer` (Scala)
+*   **How it works**: Pulls documents from MongoDB and parses them locally into an AST, discarding the values during structural identification.
+*   **Leakage Risk**: **High (Client-side ingestion)**. While values are discarded in the final output, they are still queried and sent over the wire into the analyzer's memory.
+
+### 1.5. Object-Document Mappers (ODMs) (`PyODMongo`, `MongoEngine`, `Ming`)
 *   **How they work**: Enforce a schema defined in the application code.
 *   **Leakage Risk**: **Low (No discovery needed)**. If the schema is already hardcoded in Python class definitions, the tool does not need to query database documents to infer the schema.
 *   **Limitation**: Cannot be used to discover the schema of an unknown database, as the schema must be predefined by the developer.
