@@ -1,4 +1,4 @@
-import { Given, When, Then, After, BeforeAll, AfterAll, setDefaultTimeout } from '@cucumber/cucumber';
+import { Given, When, Then, After, BeforeAll, AfterAll, Before, setDefaultTimeout } from '@cucumber/cucumber';
 import { MongoDBContainer } from '@testcontainers/mongodb';
 import { GenericContainer, Wait } from 'testcontainers';
 import { MongoClient } from 'mongodb';
@@ -16,6 +16,15 @@ let mongoUri: string;
 let runExitCode: number;
 const dbName = 'testdb';
 const outPath = path.join(process.cwd(), 'features-payload.json');
+
+export let isTlsScenario = false;
+export let isX509Scenario = false;
+
+Before(() => {
+  isTlsScenario = false;
+  isX509Scenario = false;
+});
+
 
 BeforeAll(() => {
   // Ensure the CLI is built
@@ -182,6 +191,7 @@ Then('the output payload should have buildInfo version matching {string}', (expe
 });
 
 Given('a running MongoDB container with TLS enabled', async () => {
+  isTlsScenario = true;
   const paths = getCertPaths();
   container = await new GenericContainer("mongo:7.0")
     .withExposedPorts(27017)
@@ -326,6 +336,8 @@ When('I run mongo-schema-fetch with all extended connection options and quiet mo
 });
 
 Given('a running MongoDB container with TLS and MONGODB-X509 auth enabled', async () => {
+  isTlsScenario = true;
+  isX509Scenario = true;
   const paths = getCertPaths();
   container = await new GenericContainer("mongo:7.0")
     .withExposedPorts(27017)
@@ -419,5 +431,15 @@ When('I run mongo-schema-fetch with username parameter and password in MONGODB_P
     console.error("CLI Execution failed:", err.stderr?.toString() || err.message);
   }
 });
+
+export function getTestMongoUri() { return mongoUri; }
+export function getTestDbName() { return dbName; }
+export function getTestOutPath() { return outPath; }
+export function getTestRunExitCode() { return runExitCode; }
+export function setTestRunExitCode(code: number) { runExitCode = code; }
+export function getIsTlsScenario() { return isTlsScenario; }
+export function getIsX509Scenario() { return isX509Scenario; }
+
+
 
 

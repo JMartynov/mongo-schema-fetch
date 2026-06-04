@@ -42,6 +42,36 @@ export async function inferSchema(db: Db, collectionName: string, avgObjSize: nu
   }
 }
 
+export function isSensitiveFieldOrValue(fieldName: string, values: any[]): boolean {
+  // Check field name (case-insensitive substring)
+  const sensitiveFieldNameRegex = /email|password|pwd|pass|ssn|social|phone|mobile|credit|card|address|street|city|zip|zipcode|postal|salary|balance|revenue|income|birth|name|surname|ip_address|ipaddress|ip|host|api_key|apikey|secret|token/i;
+  if (fieldName && sensitiveFieldNameRegex.test(fieldName)) {
+    return true;
+  }
+
+  // Regexes for value formats
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  const ssnRegex = /^\d{3}-\d{2}-\d{4}$/;
+  const creditCardRegex = /^\d{12,19}$/;
+  const ipAddressRegex = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+  const apiKeyRegex = /^key_live_[a-f0-9]{32,48}$/i;
+
+  for (const v of values) {
+    if (typeof v === 'string') {
+      const cleanVal = v.trim();
+      if (emailRegex.test(cleanVal) || 
+          ssnRegex.test(cleanVal) || 
+          creditCardRegex.test(cleanVal) || 
+          ipAddressRegex.test(cleanVal) || 
+          apiKeyRegex.test(cleanVal)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 export function cleanSchema(schema: any, enumThreshold: number): any {
   if (!schema) return schema;
 
@@ -61,14 +91,19 @@ export function cleanSchema(schema: any, enumThreshold: number): any {
           // We found a values array. Check if we should save it as an enum
           if (currentType === 'String' || currentType === 'Number') {
               const uniqueValues = obj.values;
-              if (uniqueValues.length > 0 && uniqueValues.length < enumThreshold) {
-                  // We only keep string values if they are short (< 100 chars)
-                  const filteredValues = uniqueValues.filter((v: any) => {
-                      if (typeof v === 'string') return v.length <= 100;
-                      return true;
-                  });
-                  if (filteredValues.length > 0) {
-                      obj.enumValues = filteredValues;
+              const fieldName = (obj.path && obj.path.length > 0) ? obj.path[obj.path.length - 1] : '';
+              
+              // Only save as enums if not a sensitive/PII field or value
+              if (!isSensitiveFieldOrValue(fieldName, uniqueValues)) {
+                  if (uniqueValues.length > 0 && uniqueValues.length < enumThreshold) {
+                      // We only keep string values if they are short (< 100 chars)
+                      const filteredValues = uniqueValues.filter((v: any) => {
+                          if (typeof v === 'string') return v.length <= 100;
+                          return true;
+                      });
+                      if (filteredValues.length > 0) {
+                          obj.enumValues = filteredValues;
+                      }
                   }
               }
           }
@@ -99,3 +134,4 @@ export function cleanSchema(schema: any, enumThreshold: number): any {
   traverse(cleaned);
   return cleaned;
 }
+

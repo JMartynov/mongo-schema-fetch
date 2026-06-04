@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { cleanSchema, inferSchema } from '../src/schema.js';
+import { cleanSchema, inferSchema, isSensitiveFieldOrValue } from '../src/schema.js';
 import { Readable } from 'stream';
 
 vi.mock('mongodb-schema', () => {
@@ -215,5 +215,80 @@ describe('Schema cleaning', () => {
 
         expect(cleaned.fields[1].types[0].enumValues).toBeUndefined();
         expect(cleaned.fields[1].types[0].values).toBeUndefined();
+    });
+
+    describe('isSensitiveFieldOrValue', () => {
+
+        it('should return true for sensitive field names', () => {
+            expect(isSensitiveFieldOrValue('email', ['test'])).toBe(true);
+            expect(isSensitiveFieldOrValue('password', ['test'])).toBe(true);
+            expect(isSensitiveFieldOrValue('ssn', ['test'])).toBe(true);
+            expect(isSensitiveFieldOrValue('ip_address', ['test'])).toBe(true);
+            expect(isSensitiveFieldOrValue('api_key', ['test'])).toBe(true);
+            expect(isSensitiveFieldOrValue('creditCard', ['test'])).toBe(true);
+            expect(isSensitiveFieldOrValue('homeAddress', ['test'])).toBe(true);
+            expect(isSensitiveFieldOrValue('salary', ['test'])).toBe(true);
+        });
+
+        it('should return false for safe field names and values', () => {
+            expect(isSensitiveFieldOrValue('status', ['active', 'inactive'])).toBe(false);
+            expect(isSensitiveFieldOrValue('count', [1, 2, 3])).toBe(false);
+        });
+
+        it('should return true if any string value matches sensitive regex patterns', () => {
+            expect(isSensitiveFieldOrValue('someField', ['john@example.com'])).toBe(true);
+            expect(isSensitiveFieldOrValue('someField', ['123-45-6789'])).toBe(true); // SSN
+            expect(isSensitiveFieldOrValue('someField', ['192.168.1.1'])).toBe(true); // IP
+            expect(isSensitiveFieldOrValue('someField', ['key_live_abcdef1234567890abcdef1234567890'])).toBe(true); // API Key
+            expect(isSensitiveFieldOrValue('someField', ['1234567812345678'])).toBe(true); // CC
+        });
+    });
+
+    describe('cleanSchema PII mitigation', () => {
+        it('should drop enum values for fields matching PII name patterns', () => {
+            const rawSchema = {
+                fields: [
+                    {
+                        name: "email",
+                        path: ["email"],
+                        type: "String",
+                        probability: 1,
+                        types: [
+                            {
+                                name: "String",
+                                path: ["email"],
+                                values: ["test@example.com", "other@example.com"]
+                            }
+                        ]
+                    }
+                ]
+            };
+            const cleaned = cleanSchema(rawSchema, 20);
+            expect(cleaned.fields[0].types[0].enumValues).toBeUndefined();
+            expect(cleaned.fields[0].types[0].values).toBeUndefined();
+        });
+
+        it('should drop enum values for fields containing sensitive formatted values', () => {
+            const rawSchema = {
+                fields: [
+                    {
+                        name: "custom_field",
+                        path: ["custom_field"],
+                        type: "String",
+                        probability: 1,
+                        types: [
+                            {
+                                name: "String",
+                                path: ["custom_field"],
+                                values: ["123-45-6789"] // SSN format
+                            }
+                        ]
+                    }
+                ]
+            };
+            const cleaned = cleanSchema(rawSchema, 20);
+            expect(cleaned.fields[0].types[0].enumValues).toBeUndefined();
+            expect(cleaned.fields[0].types[0].values).toBeUndefined();
+        });
     });
 });

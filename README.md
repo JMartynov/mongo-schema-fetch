@@ -1,5 +1,7 @@
 # mongo-schema-fetch
 
+[![Security and PII Leak Scan](https://github.com/JMartynov/mongo-schema-fetch/actions/workflows/security-ci.yml/badge.svg)](https://github.com/JMartynov/mongo-schema-fetch/actions/workflows/security-ci.yml)
+
 A secure Node.js CLI tool designed to extract MongoDB schema blueprints and performance statistics **without exposing or exporting real user data** (Zero Data Leak policy).
 
 It analyzes collections, infers schema types using `mongodb-schema`, and captures crucial context like index usage and collection statistics to power query optimization and environment simulation.
@@ -126,6 +128,37 @@ If documents vary wildly and the default 1000 sample isn't enough to capture all
 npx mongo-schema-fetch "mongodb://localhost:27017/myapp" \
   --collections logs \
   --sample 5000
+```
+
+---
+
+## Security, PII Leak Prevention & Zero Data Leak Policy
+
+The core design principle of `mongo-schema-fetch` is the **Zero Data Leak Policy**. This ensures that no real database data, Personally Identifiable Information (PII), or secrets ever leave the host machine or appear in the generated blueprint payload.
+
+### 1. Security Architecture & Sanitization Methods
+To enforce this guarantee, the sanitization pipeline applies the following multi-layer security sanitization rules during schema processing:
+
+1. **Unconditional Sample Deletion**:
+   - The underlying inference engine (`mongodb-schema`) compiles an array of real data samples (`values`) to analyze types.
+   - The utility **forcibly deletes** the raw `values` array for every field and nested type descriptor. No original data is saved.
+2. **Low-Cardinality Enum Guard**:
+   - Safe enum values are only preserved for `"String"` and `"Number"` types.
+   - Enums are only populated if the total unique count is less than `--enum-threshold` (default `20`).
+   - Any string value exceeding **100 characters** is immediately discarded to prevent capturing long text blocks, comments, or private descriptions.
+3. **Infrastructure Metadata Sanitization**:
+   - Server context queries are stripped of hostnames (`hostInfo.system.hostname`) and platform detail keys (`hostInfo.extra`) to prevent leaking internal network topologies.
+   - Replica set member names inside index stats are symbolically masked (e.g. `node_1:27017`) to keep physical IP addresses and domains private.
+
+### 2. Dual-Engine Security Testing
+To prevent regression or leak vulnerabilities (even when the tool is run with maximal verbose options such as a large enum threshold or high sample size), we run continuous BDD security checks.
+
+* **Canary PII Emulation (via `mongo-synth`)**: We seed our test databases with realistic fake PII (names, emails, phones, SSNs, credit cards, passwords, API keys) and extract the schema. The test runner compiles a PII dictionary and performs a case-insensitive substring search of all generated PII values against the output payload.
+* **Secret Detection (via `py-secret-scan`)**: In parallel, the output payload is scanned with `py-secret-scan` against a regex and high-entropy database (detecting SSNs, credit cards, emails, API keys, IP addresses, etc.) and is configured to fail on `LOW` risk thresholds.
+
+To run the security acceptance tests locally:
+```bash
+./run-security-tests.sh
 ```
 
 ---

@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "properties": {
+    "name": { "type": "string" },
+    "email": { "type": "string" },
+    "phone": { "type": "string" },
+    "ssn": { "type": "string" },
+    "credit_card": { "type": "string" },
+    "address": {
+      "type": "object",
+      "properties": {
+        "street": { "type": "string" },
+        "city": { "type": "string" }
+      }
+    },
+    "roles": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "required": ["name", "email"]
+}
