@@ -22,6 +22,7 @@ program
   .option('--out <path>', 'Output file path', 'schema-payload.json')
   .option('--sample <number>', 'Custom sample limit for schema inference', parseInt)
   .option('--enum-threshold <number>', 'Threshold for saving enum values', parseInt, 20)
+  .option('--store-values', 'Collect and store raw values in the schema analysis', false)
   .option('--read-preference <mode>', 'Read preference for Replica Sets (e.g. secondary)')
   .option('--quiet', 'Disable all interactive prompts (CI/CD mode)')
   .option('--query-file <path>', 'Path to a JSON file containing the query to analyze')
@@ -158,7 +159,7 @@ program
 
         const stats = await fetchCollectionStats(db, collName, { additional: options.additional });
         const indexes = await fetchCollectionIndexes(db, collName);
-        const schema = await inferSchema(db, collName, stats.avgObjSize, options.sample, options.enumThreshold);
+        const schema = await inferSchema(db, collName, stats.avgObjSize, options.sample, options.enumThreshold, options.storeValues);
 
         collectionsData.push({
           stats,

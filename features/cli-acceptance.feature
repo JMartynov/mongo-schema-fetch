@@ -10,7 +10,7 @@ Feature: CLI runs against different MongoDB versions and configurations
       | Alice   | 30  | admin |
       | Bob     | 25  | user  |
       | Charlie | 35  | user  |
-    When I run mongo-schema-fetch with "--all-collections" and quiet mode
+    When I run mongo-schema-fetch with "--all-collections --store-values" and quiet mode
     Then the exit code should be 0
     And the output payload should contain collection "users"
     And the field "role" in "users" should have enum values "admin" and "user"
@@ -40,7 +40,7 @@ Feature: CLI runs against different MongoDB versions and configurations
       | name  | age | role  |
       | Alice | 30  | admin |
       | Bob   | 25  | user  |
-    When I run mongo-schema-fetch with "--all-collections" and quiet mode
+    When I run mongo-schema-fetch with "--all-collections --store-values" and quiet mode
     Then the exit code should be 0
     And the output payload should contain collection "users"
     And the field "role" in "users" should have enum values "admin" and "user"

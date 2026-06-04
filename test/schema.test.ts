@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { cleanSchema, inferSchema, isSensitiveFieldOrValue } from '../src/schema.js';
 import { Readable } from 'stream';
+import mongodbSchema from 'mongodb-schema';
 
 vi.mock('mongodb-schema', () => {
     return {
@@ -91,6 +92,35 @@ describe('inferSchema protection rules', () => {
         // Will default count to 0, which is <= 1000, calling find()
         await inferSchema(mockDb, 'users', 1000);
         expect(findMock).toHaveBeenCalled();
+    });
+
+    it('should default to storeValues: false, and set it to true if explicitly passed', async () => {
+        const findMock = vi.fn().mockReturnValue(Readable.from([]));
+        const mockDb = {
+            collection: () => ({
+                estimatedDocumentCount: () => Promise.resolve(50),
+                find: findMock
+            })
+        } as any;
+
+        const parserMock = vi.mocked(mongodbSchema) as any;
+        parserMock.mockClear();
+
+        // 1. By default, storeValues should be false
+        await inferSchema(mockDb, 'users', 1000);
+        expect(parserMock).toHaveBeenCalledWith(expect.any(Readable), expect.objectContaining({
+            semanticTypes: true,
+            storeValues: false
+        }));
+
+        parserMock.mockClear();
+
+        // 2. If storeValues is explicitly passed as true, it should be true
+        await inferSchema(mockDb, 'users', 1000, undefined, 20, true);
+        expect(parserMock).toHaveBeenCalledWith(expect.any(Readable), expect.objectContaining({
+            semanticTypes: true,
+            storeValues: true
+        }));
     });
 });
 

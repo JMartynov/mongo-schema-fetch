@@ -69,7 +69,7 @@ describe.skipIf(process.env.SKIP_TESTCONTAINERS === 'true')('mongo-schema-fetch 
                 outPath = path.join(__dirname, `test-payload-${version.replace(':', '-')}.json`);
 
                 // execute the cli
-                execSync(`node dist/cli.js "${uri}" --db ${dbName} --out ${outPath} --quiet`);
+                execSync(`node dist/cli.js "${uri}" --db ${dbName} --out ${outPath} --quiet --store-values`);
 
                 expect(fs.existsSync(outPath)).toBe(true);
 
