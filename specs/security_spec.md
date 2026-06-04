@@ -51,8 +51,9 @@ To eliminate the leakage vectors, `mongo-schema-fetch` enforces strict sanitizat
 ```
 
 ### 2.1. Sanitization Invariants
-- **Unconditional Values Wipe**: For every field and type descriptor (including nested items in documents and arrays), the raw `values` list is **deleted**.
-- **Enum Threshold Limits**: Enum values are only saved for `"String"` and `"Number"` types. They are strictly limited to cardinality `< enumThreshold` (default `20`).
+- **Default Value Suppression**: By default, `mongo-schema-fetch` executes with `storeValues: false` at the parser level, ensuring no raw value samples or enum values are ever loaded into the generated schema structure.
+- **Unconditional Values Wipe**: If `--store-values` is explicitly enabled, all `values` lists generated during the analysis are strictly deleted in the clean schema phase.
+- **Enum Threshold Limits**: When values are stored, enums are restricted to `"String"` and `"Number"` types and strictly limited to a cardinality `< enumThreshold` (default `20`).
 - **Enum Length Guard**: Any string enum value exceeding **100 characters** is immediately discarded. This prevents capturing raw text blocks, descriptions, or comments that might contain sensitive remarks or secrets.
 - **Environment Scrubbing**: The system context fetched by `hostInfo` is explicitly sanitized. The `hostname` and the entire `extra` object are stripped before payload compilation.
 
@@ -60,7 +61,7 @@ To eliminate the leakage vectors, `mongo-schema-fetch` enforces strict sanitizat
 
 ## 3. Security Verification Methodology
 
-A dedicated, isolated security testing pipeline is implemented to continuously audit the utility against PII leakage, even under **verbose maximal options** (e.g. high enum threshold and large sample sizes).
+A dedicated, isolated security testing pipeline is implemented to continuously audit the utility against PII leakage, ensuring that the CLI operates safely under its default configuration (with `--store-values` set to `false`).
 
 ### 3.1. Test Components
 1. **mongo-synth (Synthetic Ingestion)**:

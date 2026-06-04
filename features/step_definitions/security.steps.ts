@@ -46,7 +46,7 @@ When('I run mongo-schema-fetch with maximal security testing options', () => {
   const outPath = getTestOutPath();
   try {
     // --enum-threshold 1000 ensures that the CLI attempts to collect enums for all fields (maximal verbose option)
-    const cmd = `node dist/cli.js "${mongoUri}" --db ${dbName} --out ${outPath} --quiet --store-values --enum-threshold 1000 --sample 1000 --all-collections`;
+    const cmd = `node dist/cli.js "${mongoUri}" --db ${dbName} --out ${outPath} --quiet --enum-threshold 1000 --sample 1000 --all-collections`;
     execSync(cmd, { stdio: 'pipe' });
     setTestRunExitCode(0);
   } catch (err: any) {
@@ -61,7 +61,7 @@ When('I run mongo-schema-fetch with TLS, mutual authentication, and maximal secu
   const outPath = getTestOutPath();
   const paths = getCertPaths();
   try {
-    const cmd = `node dist/cli.js "${mongoUri}" --db ${dbName} --out ${outPath} --quiet --tls --tls-ca-file "${paths.caPem}" --tls-certificate-key-file "${paths.clientPem}" --store-values --enum-threshold 1000 --sample 1000 --all-collections`;
+    const cmd = `node dist/cli.js "${mongoUri}" --db ${dbName} --out ${outPath} --quiet --tls --tls-ca-file "${paths.caPem}" --tls-certificate-key-file "${paths.clientPem}" --enum-threshold 1000 --sample 1000 --all-collections`;
     execSync(cmd, { stdio: 'pipe' });
     setTestRunExitCode(0);
   } catch (err: any) {
@@ -76,7 +76,7 @@ When('I run mongo-schema-fetch with TLS, MONGODB-X509 authentication, and maxima
   const outPath = getTestOutPath();
   const paths = getCertPaths();
   try {
-    const cmd = `node dist/cli.js "${mongoUri}" --db ${dbName} --out ${outPath} --quiet --tls --tls-ca-file "${paths.caPem}" --tls-certificate-key-file "${paths.clientPem}" --auth-mechanism MONGODB-X509 --auth-source '$external' --store-values --enum-threshold 1000 --sample 1000 --all-collections`;
+    const cmd = `node dist/cli.js "${mongoUri}" --db ${dbName} --out ${outPath} --quiet --tls --tls-ca-file "${paths.caPem}" --tls-certificate-key-file "${paths.clientPem}" --auth-mechanism MONGODB-X509 --auth-source '$external' --enum-threshold 1000 --sample 1000 --all-collections`;
     execSync(cmd, { stdio: 'pipe' });
     setTestRunExitCode(0);
   } catch (err: any) {
