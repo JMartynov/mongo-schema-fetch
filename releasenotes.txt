@@ -1,7 +1,7 @@
 Release Notes - mongo-schema-fetch
 
 =========================================
-v1.2.0
+v1.2.1
 - Default schema inference value extraction (storeValues) to false to enforce Zero Data Leak Policy.
 - Added --store-values CLI option to explicitly opt-in to value/enum collection.
 - Added --stored-values-limit <number> to configure storedValuesLengthLimit (default 100).
