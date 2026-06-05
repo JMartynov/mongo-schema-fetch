@@ -14,6 +14,7 @@ let container: any;
 let client: MongoClient;
 let mongoUri: string;
 let runExitCode: number;
+let lastRunError = '';
 const dbName = 'testdb';
 const outPath = path.join(process.cwd(), 'features-payload.json');
 
@@ -23,7 +24,20 @@ export let isX509Scenario = false;
 Before(() => {
   isTlsScenario = false;
   isX509Scenario = false;
+  lastRunError = '';
 });
+
+function runCliCommand(cmd: string, env: any = {}) {
+  try {
+    lastRunError = '';
+    execSync(cmd, { stdio: 'pipe', env: { ...process.env, ...env } });
+    runExitCode = 0;
+  } catch (err: any) {
+    runExitCode = err.status ?? 1;
+    lastRunError = err.stderr?.toString() || err.message;
+  }
+}
+
 
 
 BeforeAll(() => {
@@ -111,42 +125,26 @@ Given('the database has collection {string} with documents:', async (collectionN
 });
 
 When('I run mongo-schema-fetch with {string} and quiet mode', (args: string) => {
-  try {
-    const cmd = `node dist/cli.js "${mongoUri}" --db ${dbName} --out ${outPath} --quiet ${args}`;
-    execSync(cmd, { stdio: 'pipe' });
-    runExitCode = 0;
-  } catch (err: any) {
-    runExitCode = err.status ?? 1;
-    console.error("CLI Execution failed:", err.stderr?.toString() || err.message);
-  }
+  runCliCommand(`node dist/cli.js "${mongoUri}" --db ${dbName} --out ${outPath} --quiet ${args}`);
 });
 
 When('I run mongo-schema-fetch with username and password parameters and quiet mode', () => {
-  try {
-    const uriWithoutCredentials = mongoUri.replace(/\/\/[^@]+@/, '//');
-    const cmd = `node dist/cli.js "${uriWithoutCredentials}" --db ${dbName} --out ${outPath} --quiet -u admin -p password --all-collections`;
-    execSync(cmd, { stdio: 'pipe' });
-    runExitCode = 0;
-  } catch (err: any) {
-    runExitCode = err.status ?? 1;
-    console.error("CLI Execution failed:", err.stderr?.toString() || err.message);
-  }
+  const uriWithoutCredentials = mongoUri.replace(/\/\/[^@]+@/, '//');
+  runCliCommand(`node dist/cli.js "${uriWithoutCredentials}" --db ${dbName} --out ${outPath} --quiet -u admin -p password --all-collections`);
 });
 
 When('I run mongo-schema-fetch with wrong username and password parameters and quiet mode', () => {
-  try {
-    const uriWithoutCredentials = mongoUri.replace(/\/\/[^@]+@/, '//');
-    const cmd = `node dist/cli.js "${uriWithoutCredentials}" --db ${dbName} --out ${outPath} --quiet -u wronguser -p wrongpassword --all-collections`;
-    execSync(cmd, { stdio: 'pipe' });
-    runExitCode = 0;
-  } catch (err: any) {
-    runExitCode = err.status ?? 1;
-  }
+  const uriWithoutCredentials = mongoUri.replace(/\/\/[^@]+@/, '//');
+  runCliCommand(`node dist/cli.js "${uriWithoutCredentials}" --db ${dbName} --out ${outPath} --quiet -u wronguser -p wrongpassword --all-collections`);
 });
 
 Then('the exit code should be {int}', (expectedCode: number) => {
+  if (runExitCode !== expectedCode) {
+    console.error(`Assertion failed: Expected exit code ${expectedCode} but got ${runExitCode}.${lastRunError ? `\nCLI Error Details:\n${lastRunError}` : ''}`);
+  }
   assert.strictEqual(runExitCode, expectedCode);
 });
+
 
 Then('the output payload should contain collection {string}', (collectionName: string) => {
   assert.ok(fs.existsSync(outPath), "Output payload file does not exist");
@@ -238,111 +236,46 @@ Given('a running MongoDB container with TLS enabled', async () => {
 });
 
 When('I run mongo-schema-fetch with TLS and CA verification and quiet mode', () => {
-  try {
-    const paths = getCertPaths();
-    const cmd = `node dist/cli.js "${mongoUri}" --db ${dbName} --out ${outPath} --quiet --tls --tls-ca-file "${paths.caPem}" --all-collections`;
-    execSync(cmd, { stdio: 'pipe' });
-    runExitCode = 0;
-  } catch (err: any) {
-    runExitCode = err.status ?? 1;
-    console.error("CLI Execution failed:", err.stderr?.toString() || err.message);
-  }
+  const paths = getCertPaths();
+  runCliCommand(`node dist/cli.js "${mongoUri}" --db ${dbName} --out ${outPath} --quiet --tls --tls-ca-file "${paths.caPem}" --all-collections`);
 });
 
 When('I run mongo-schema-fetch with TLS and mutual authentication and quiet mode', () => {
-  try {
-    const paths = getCertPaths();
-    const cmd = `node dist/cli.js "${mongoUri}" --db ${dbName} --out ${outPath} --quiet --tls --tls-ca-file "${paths.caPem}" --tls-certificate-key-file "${paths.clientPem}" --all-collections`;
-    execSync(cmd, { stdio: 'pipe' });
-    runExitCode = 0;
-  } catch (err: any) {
-    runExitCode = err.status ?? 1;
-    console.error("CLI Execution failed:", err.stderr?.toString() || err.message);
-  }
+  const paths = getCertPaths();
+  runCliCommand(`node dist/cli.js "${mongoUri}" --db ${dbName} --out ${outPath} --quiet --tls --tls-ca-file "${paths.caPem}" --tls-certificate-key-file "${paths.clientPem}" --all-collections`);
 });
 
 When('I run mongo-schema-fetch with TLS but no CA verification and quiet mode', () => {
-  try {
-    const cmd = `node dist/cli.js "${mongoUri}" --db ${dbName} --out ${outPath} --quiet --tls --all-collections`;
-    execSync(cmd, { stdio: 'pipe' });
-    runExitCode = 0;
-  } catch (err: any) {
-    runExitCode = err.status ?? 1;
-  }
+  runCliCommand(`node dist/cli.js "${mongoUri}" --db ${dbName} --out ${outPath} --quiet --tls --all-collections`);
 });
 
 When('I run mongo-schema-fetch with TLS and invalid CA verification bypassed and quiet mode', () => {
-  try {
-    const cmd = `node dist/cli.js "${mongoUri}" --db ${dbName} --out ${outPath} --quiet --tls --tls-allow-invalid-certificates --all-collections`;
-    execSync(cmd, { stdio: 'pipe' });
-    runExitCode = 0;
-  } catch (err: any) {
-    runExitCode = err.status ?? 1;
-    console.error("CLI Execution failed:", err.stderr?.toString() || err.message);
-  }
+  runCliCommand(`node dist/cli.js "${mongoUri}" --db ${dbName} --out ${outPath} --quiet --tls --tls-allow-invalid-certificates --all-collections`);
 });
 
 When('I run mongo-schema-fetch with TLS and mismatching hostname allowed and quiet mode', () => {
-  try {
-    const paths = getCertPaths();
-    const cmd = `node dist/cli.js "${mongoUri}" --db ${dbName} --out ${outPath} --quiet --tls --tls-ca-file "${paths.caPem}" --tls-allow-invalid-hostnames --all-collections`;
-    execSync(cmd, { stdio: 'pipe' });
-    runExitCode = 0;
-  } catch (err: any) {
-    runExitCode = err.status ?? 1;
-    console.error("CLI Execution failed:", err.stderr?.toString() || err.message);
-  }
+  const paths = getCertPaths();
+  runCliCommand(`node dist/cli.js "${mongoUri}" --db ${dbName} --out ${outPath} --quiet --tls --tls-ca-file "${paths.caPem}" --tls-allow-invalid-hostnames --all-collections`);
 });
 
 When('I run mongo-schema-fetch with username, password, authSource, and authMechanism parameters and quiet mode', () => {
-  try {
-    const uriWithoutCredentials = mongoUri.replace(/\/\/[^@]+@/, '//');
-    const cmd = `node dist/cli.js "${uriWithoutCredentials}" --db ${dbName} --out ${outPath} --quiet -u admin -p password --auth-source admin --auth-mechanism SCRAM-SHA-256 --all-collections`;
-    execSync(cmd, { stdio: 'pipe' });
-    runExitCode = 0;
-  } catch (err: any) {
-    runExitCode = err.status ?? 1;
-    console.error("CLI Execution failed:", err.stderr?.toString() || err.message);
-  }
+  const uriWithoutCredentials = mongoUri.replace(/\/\/[^@]+@/, '//');
+  runCliCommand(`node dist/cli.js "${uriWithoutCredentials}" --db ${dbName} --out ${outPath} --quiet -u admin -p password --auth-source admin --auth-mechanism SCRAM-SHA-256 --all-collections`);
 });
 
 When('I run mongo-schema-fetch with TLS, mutual authentication, and encrypted client certificate password and quiet mode', () => {
-  try {
-    const paths = getCertPaths();
-    const cmd = `node dist/cli.js "${mongoUri}" --db ${dbName} --out ${outPath} --quiet --tls --tls-ca-file "${paths.caPem}" --tls-certificate-key-file "${paths.clientEncPem}" --tls-certificate-key-file-password testpassword --all-collections`;
-    execSync(cmd, { stdio: 'pipe' });
-    runExitCode = 0;
-  } catch (err: any) {
-    runExitCode = err.status ?? 1;
-    console.error("CLI Execution failed:", err.stderr?.toString() || err.message);
-  }
+  const paths = getCertPaths();
+  runCliCommand(`node dist/cli.js "${mongoUri}" --db ${dbName} --out ${outPath} --quiet --tls --tls-ca-file "${paths.caPem}" --tls-certificate-key-file "${paths.clientEncPem}" --tls-certificate-key-file-password testpassword --all-collections`);
 });
 
 When('I run mongo-schema-fetch with username parameter and password in environment and quiet mode', () => {
-  try {
-    const uriWithoutCredentials = mongoUri.replace(/\/\/[^@]+@/, '//');
-    const cmd = `node dist/cli.js "${uriWithoutCredentials}" --db ${dbName} --out ${outPath} --quiet -u admin --all-collections`;
-    execSync(cmd, {
-      stdio: 'pipe',
-      env: { ...process.env, MONGODB_PASSWORD: 'password' }
-    });
-    runExitCode = 0;
-  } catch (err: any) {
-    runExitCode = err.status ?? 1;
-    console.error("CLI Execution failed:", err.stderr?.toString() || err.message);
-  }
+  const uriWithoutCredentials = mongoUri.replace(/\/\/[^@]+@/, '//');
+  runCliCommand(`node dist/cli.js "${uriWithoutCredentials}" --db ${dbName} --out ${outPath} --quiet -u admin --all-collections`, { MONGODB_PASSWORD: 'password' });
 });
 
 When('I run mongo-schema-fetch with all extended connection options and quiet mode', () => {
-  try {
-    const uriWithoutCredentials = mongoUri.replace(/\/\/[^@]+@/, '//');
-    const cmd = `node dist/cli.js "${uriWithoutCredentials}" --db ${dbName} --out ${outPath} --quiet -u admin -p password --auth-source admin --auth-mechanism SCRAM-SHA-256 --auth-mechanism-properties "SERVICE_NAME:mongodb" --connect-timeout-ms 9000 --socket-timeout-ms 20000 --server-selection-timeout-ms 4000 --max-idle-time-ms 30000 --max-pool-size 10 --min-pool-size 2 --app-name "test-fetch-app" --retry-writes --retry-reads --direct-connection --compressors zlib --write-concern-w majority --write-concern-j --write-concern-wtimeout-ms 3000 --read-concern-level local --all-collections`;
-    execSync(cmd, { stdio: 'pipe' });
-    runExitCode = 0;
-  } catch (err: any) {
-    runExitCode = err.status ?? 1;
-    console.error("CLI Execution failed:", err.stderr?.toString() || err.message);
-  }
+  const uriWithoutCredentials = mongoUri.replace(/\/\/[^@]+@/, '//');
+  runCliCommand(`node dist/cli.js "${uriWithoutCredentials}" --db ${dbName} --out ${outPath} --quiet -u admin -p password --auth-source admin --auth-mechanism SCRAM-SHA-256 --auth-mechanism-properties "SERVICE_NAME:mongodb" --connect-timeout-ms 9000 --socket-timeout-ms 20000 --server-selection-timeout-ms 4000 --max-idle-time-ms 30000 --max-pool-size 10 --min-pool-size 2 --app-name "test-fetch-app" --retry-writes --retry-reads --direct-connection --compressors zlib --write-concern-w majority --write-concern-j --write-concern-wtimeout-ms 3000 --read-concern-level local --all-collections`);
 });
 
 Given('a running MongoDB container with TLS and MONGODB-X509 auth enabled', async () => {
@@ -404,42 +337,18 @@ Given('a running MongoDB container with TLS and MONGODB-X509 auth enabled', asyn
 });
 
 When('I run mongo-schema-fetch with TLS and MONGODB-X509 authentication and quiet mode', () => {
-  try {
-    const paths = getCertPaths();
-    const cmd = `node dist/cli.js "${mongoUri}" --db ${dbName} --out ${outPath} --quiet --tls --tls-ca-file "${paths.caPem}" --tls-certificate-key-file "${paths.clientPem}" --auth-mechanism MONGODB-X509 --auth-source '$external' --all-collections`;
-    execSync(cmd, { stdio: 'pipe' });
-    runExitCode = 0;
-  } catch (err: any) {
-    runExitCode = err.status ?? 1;
-    console.error("CLI Execution failed:", err.stderr?.toString() || err.message);
-  }
+  const paths = getCertPaths();
+  runCliCommand(`node dist/cli.js "${mongoUri}" --db ${dbName} --out ${outPath} --quiet --tls --tls-ca-file "${paths.caPem}" --tls-certificate-key-file "${paths.clientPem}" --auth-mechanism MONGODB-X509 --auth-source '$external' --all-collections`);
 });
 
 When('I run mongo-schema-fetch with username, password, authSource, and SCRAM-SHA-1 authMechanism parameters and quiet mode', () => {
-  try {
-    const uriWithoutCredentials = mongoUri.replace(/\/\/[^@]+@/, '//');
-    const cmd = `node dist/cli.js "${uriWithoutCredentials}" --db ${dbName} --out ${outPath} --quiet -u admin -p password --auth-source admin --auth-mechanism SCRAM-SHA-1 --all-collections`;
-    execSync(cmd, { stdio: 'pipe' });
-    runExitCode = 0;
-  } catch (err: any) {
-    runExitCode = err.status ?? 1;
-    console.error("CLI Execution failed:", err.stderr?.toString() || err.message);
-  }
+  const uriWithoutCredentials = mongoUri.replace(/\/\/[^@]+@/, '//');
+  runCliCommand(`node dist/cli.js "${uriWithoutCredentials}" --db ${dbName} --out ${outPath} --quiet -u admin -p password --auth-source admin --auth-mechanism SCRAM-SHA-1 --all-collections`);
 });
 
 When('I run mongo-schema-fetch with username parameter and password in MONGODB_PASS environment and quiet mode', () => {
-  try {
-    const uriWithoutCredentials = mongoUri.replace(/\/\/[^@]+@/, '//');
-    const cmd = `node dist/cli.js "${uriWithoutCredentials}" --db ${dbName} --out ${outPath} --quiet -u admin --all-collections`;
-    execSync(cmd, {
-      stdio: 'pipe',
-      env: { ...process.env, MONGODB_PASS: 'password' }
-    });
-    runExitCode = 0;
-  } catch (err: any) {
-    runExitCode = err.status ?? 1;
-    console.error("CLI Execution failed:", err.stderr?.toString() || err.message);
-  }
+  const uriWithoutCredentials = mongoUri.replace(/\/\/[^@]+@/, '//');
+  runCliCommand(`node dist/cli.js "${uriWithoutCredentials}" --db ${dbName} --out ${outPath} --quiet -u admin --all-collections`, { MONGODB_PASS: 'password' });
 });
 
 export function getTestMongoUri() { return mongoUri; }
@@ -458,26 +367,13 @@ Then('the output payload should not contain collection {string}', (collectionNam
 });
 
 When('I run mongo-schema-fetch with username, password, and negated connection parameters and quiet mode', () => {
-  try {
-    const uriWithoutCredentials = mongoUri.replace(/\/\/[^@]+@/, '//');
-    const cmd = `node dist/cli.js "${uriWithoutCredentials}" --db ${dbName} --out ${outPath} --quiet -u admin -p password --no-retry-writes --no-retry-reads --no-write-concern-j --all-collections`;
-    execSync(cmd, { stdio: 'pipe' });
-    runExitCode = 0;
-  } catch (err: any) {
-    runExitCode = err.status ?? 1;
-    console.error("CLI Execution failed:", err.stderr?.toString() || err.message);
-  }
+  const uriWithoutCredentials = mongoUri.replace(/\/\/[^@]+@/, '//');
+  runCliCommand(`node dist/cli.js "${uriWithoutCredentials}" --db ${dbName} --out ${outPath} --quiet -u admin -p password --no-retry-writes --no-retry-reads --no-write-concern-j --all-collections`);
 });
 
 When('I run mongo-schema-fetch with username, password, and disabled direct connection and quiet mode', () => {
-  try {
-    const uriWithoutCredentials = mongoUri.replace(/\/\/[^@]+@/, '//');
-    const cmd = `node dist/cli.js "${uriWithoutCredentials}" --db ${dbName} --out ${outPath} --quiet -u admin -p password --no-direct-connection --all-collections`;
-    execSync(cmd, { stdio: 'pipe' });
-    runExitCode = 0;
-  } catch (err: any) {
-    runExitCode = err.status ?? 1;
-  }
+  const uriWithoutCredentials = mongoUri.replace(/\/\/[^@]+@/, '//');
+  runCliCommand(`node dist/cli.js "${uriWithoutCredentials}" --db ${dbName} --out ${outPath} --quiet -u admin -p password --no-direct-connection --all-collections`);
 });
 
 Given('a query file {string} containing {string}', (filename: string, content: string) => {
