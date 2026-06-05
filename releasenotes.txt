@@ -1,0 +1,30 @@
+Release Notes - mongo-schema-fetch
+
+=========================================
+v1.2.0
+- Default schema inference value extraction (storeValues) to false to enforce Zero Data Leak Policy.
+- Added --store-values CLI option to explicitly opt-in to value/enum collection.
+- Added --stored-values-limit <number> to configure storedValuesLengthLimit (default 100).
+- Added --distinct-fields-threshold <number> to configure distinctFieldsAbortThreshold to prevent OOM errors on highly polymorphic collections.
+- Implemented robust PII and credentials sanitization filter (emails, passwords, SSNs, credit cards, IP addresses, API keys).
+- Added dedicated run-security-tests.sh test harness and CI pipeline for zero-leak validation.
+
+=========================================
+v1.1.0
+- Expanded MongoDB connection support in CLI.
+- Added comprehensive support for TLS/SSL, mTLS (client certificates), SCRAM-SHA-1/256, MONGODB-X509, and MONGODB-AWS authentication.
+- Implemented active container-based acceptance testing for all connection types.
+
+=========================================
+v1.0.2
+- Implemented collection storage-model awareness (detecting capped collections, views, and timeseries).
+- Added collection of extended serverStatus metrics and storage-engine cache diagnostics.
+- Added --additional flag to retrieve plan cache stats ($planCacheStats) and latency histograms ($collStats).
+
+=========================================
+v1.0.1
+- Initial release of mongo-schema-fetch.
+- Extracts MongoDB schema blueprints securely without downloading real data.
+- Built-in JSON Schema schema validation (AJV).
+- Interactive collection selection prompt.
+- Gherkin Cucumber acceptance testing suite.
