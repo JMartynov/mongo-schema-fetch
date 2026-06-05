@@ -176,3 +176,76 @@ Feature: CLI runs against different MongoDB versions and configurations
     Then the exit code should be 0
     And the output payload should contain collection "users"
 
+  Scenario: Fetch schema targeting a specific collection
+    Given a running MongoDB "mongo:7.0" container in "standalone" configuration
+    And the database has collection "users" with documents:
+      | name  | age | role  |
+      | Alice | 30  | admin |
+    And the database has collection "orders" with documents:
+      | total | status    |
+      | 100   | completed |
+    When I run mongo-schema-fetch with "--collections users" and quiet mode
+    Then the exit code should be 0
+    And the output payload should contain collection "users"
+    And the output payload should not contain collection "orders"
+
+  Scenario: Fetch schema with negated connection options
+    Given a running MongoDB "mongo:7.0" container in "auth" configuration
+    And the database has collection "users" with documents:
+      | name  | age | role  |
+      | Alice | 30  | admin |
+    When I run mongo-schema-fetch with username, password, and negated connection parameters and quiet mode
+    Then the exit code should be 0
+    And the output payload should contain collection "users"
+
+  Scenario: Fetch schema fails if direct connection is disabled on single-node replica set
+    Given a running MongoDB "mongo:7.0" container in "auth" configuration
+    And the database has collection "users" with documents:
+      | name  | age | role  |
+      | Alice | 30  | admin |
+    When I run mongo-schema-fetch with username, password, and disabled direct connection and quiet mode
+    Then the exit code should be 1
+
+  Scenario: Auto-analyze passes when query is optimized
+    Given a running MongoDB "mongo:7.0" container in "standalone" configuration
+    And the database has collection "users" with documents:
+      | name  | age |
+      | Alice | 30  |
+    And a query file "query-ok.json" containing "find users"
+    When I run mongo-schema-fetch with "--all-collections --query-file query-ok.json --auto-analyze" and quiet mode
+    Then the exit code should be 0
+
+  Scenario: Auto-analyze fails when query degrades performance
+    Given a running MongoDB "mongo:7.0" container in "standalone" configuration
+    And the database has collection "users" with documents:
+      | name  | age |
+      | Alice | 30  |
+    And a query file "query-fail.json" containing "fail_test"
+    When I run mongo-schema-fetch with "--all-collections --query-file query-fail.json --auto-analyze" and quiet mode
+    Then the exit code should be 1
+
+  Scenario: Fetch schema with customized stored values limit and PII sanitization
+    Given a running MongoDB "mongo:7.0" container in "standalone" configuration
+    And the database has collection "users" with documents:
+      | email             | age | role  |
+      | alice@example.com | 30  | admin |
+      | bob@example.com   | 25  | user  |
+    When I run mongo-schema-fetch with "--store-values --stored-values-limit 1 --distinct-fields-threshold 50 --sanitize-pii --all-collections" and quiet mode
+    Then the exit code should be 0
+    And the output payload should contain collection "users"
+    And the field "email" in "users" should not leak any values
+
+  Scenario: CLI fails if distinct fields threshold is exceeded
+    Given a running MongoDB "mongo:7.0" container in "standalone" configuration
+    And the database has collection "users" with documents:
+      | name  | age |
+      | Alice | 30  |
+    When I run mongo-schema-fetch with "--all-collections --distinct-fields-threshold 1" and quiet mode
+    Then the exit code should be 1
+
+  Scenario: Fetch schema fails if load balanced option is enabled on standalone connection
+    Given a running MongoDB "mongo:7.0" container in "standalone" configuration
+    When I run mongo-schema-fetch with "--load-balanced --all-collections" and quiet mode
+    Then the exit code should be 1
+
+

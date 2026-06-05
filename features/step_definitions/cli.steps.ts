@@ -38,6 +38,8 @@ AfterAll(() => {
   cleanupCerts();
 });
 
+const createdFiles: string[] = [];
+
 After(async () => {
   if (client) {
     await client.close();
@@ -48,6 +50,14 @@ After(async () => {
   if (fs.existsSync(outPath)) {
     fs.unlinkSync(outPath);
   }
+  for (const f of createdFiles) {
+    if (fs.existsSync(f)) {
+      try {
+        fs.unlinkSync(f);
+      } catch (e) {}
+    }
+  }
+  createdFiles.length = 0;
 });
 
 Given('a running MongoDB {string} container in {string} configuration', async (version: string, config: string) => {
@@ -326,7 +336,7 @@ When('I run mongo-schema-fetch with username parameter and password in environme
 When('I run mongo-schema-fetch with all extended connection options and quiet mode', () => {
   try {
     const uriWithoutCredentials = mongoUri.replace(/\/\/[^@]+@/, '//');
-    const cmd = `node dist/cli.js "${uriWithoutCredentials}" --db ${dbName} --out ${outPath} --quiet -u admin -p password --auth-source admin --auth-mechanism SCRAM-SHA-256 --connect-timeout-ms 9000 --socket-timeout-ms 20000 --server-selection-timeout-ms 4000 --max-idle-time-ms 30000 --max-pool-size 10 --min-pool-size 2 --app-name "test-fetch-app" --retry-writes --retry-reads --direct-connection --compressors zlib --write-concern-w majority --write-concern-j --write-concern-wtimeout-ms 3000 --read-concern-level local --all-collections`;
+    const cmd = `node dist/cli.js "${uriWithoutCredentials}" --db ${dbName} --out ${outPath} --quiet -u admin -p password --auth-source admin --auth-mechanism SCRAM-SHA-256 --auth-mechanism-properties "SERVICE_NAME:mongodb" --connect-timeout-ms 9000 --socket-timeout-ms 20000 --server-selection-timeout-ms 4000 --max-idle-time-ms 30000 --max-pool-size 10 --min-pool-size 2 --app-name "test-fetch-app" --retry-writes --retry-reads --direct-connection --compressors zlib --write-concern-w majority --write-concern-j --write-concern-wtimeout-ms 3000 --read-concern-level local --all-collections`;
     execSync(cmd, { stdio: 'pipe' });
     runExitCode = 0;
   } catch (err: any) {
@@ -439,6 +449,43 @@ export function getTestRunExitCode() { return runExitCode; }
 export function setTestRunExitCode(code: number) { runExitCode = code; }
 export function getIsTlsScenario() { return isTlsScenario; }
 export function getIsX509Scenario() { return isX509Scenario; }
+
+Then('the output payload should not contain collection {string}', (collectionName: string) => {
+  assert.ok(fs.existsSync(outPath), "Output payload file does not exist");
+  const payload = JSON.parse(fs.readFileSync(outPath, 'utf8'));
+  const coll = payload.collections.find((c: any) => c.stats.name === collectionName);
+  assert.ok(!coll, `Collection ${collectionName} was found in payload but should be excluded`);
+});
+
+When('I run mongo-schema-fetch with username, password, and negated connection parameters and quiet mode', () => {
+  try {
+    const uriWithoutCredentials = mongoUri.replace(/\/\/[^@]+@/, '//');
+    const cmd = `node dist/cli.js "${uriWithoutCredentials}" --db ${dbName} --out ${outPath} --quiet -u admin -p password --no-retry-writes --no-retry-reads --no-write-concern-j --all-collections`;
+    execSync(cmd, { stdio: 'pipe' });
+    runExitCode = 0;
+  } catch (err: any) {
+    runExitCode = err.status ?? 1;
+    console.error("CLI Execution failed:", err.stderr?.toString() || err.message);
+  }
+});
+
+When('I run mongo-schema-fetch with username, password, and disabled direct connection and quiet mode', () => {
+  try {
+    const uriWithoutCredentials = mongoUri.replace(/\/\/[^@]+@/, '//');
+    const cmd = `node dist/cli.js "${uriWithoutCredentials}" --db ${dbName} --out ${outPath} --quiet -u admin -p password --no-direct-connection --all-collections`;
+    execSync(cmd, { stdio: 'pipe' });
+    runExitCode = 0;
+  } catch (err: any) {
+    runExitCode = err.status ?? 1;
+  }
+});
+
+Given('a query file {string} containing {string}', (filename: string, content: string) => {
+  const filePath = path.join(process.cwd(), filename);
+  fs.writeFileSync(filePath, content, 'utf8');
+  createdFiles.push(filePath);
+});
+
 
 
 

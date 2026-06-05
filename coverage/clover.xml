@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<coverage generated="1780663449420" clover="3.2.0">
-  <project timestamp="1780663449420" name="All files">
+<coverage generated="1780664309207" clover="3.2.0">
+  <project timestamp="1780664309207" name="All files">
     <metrics statements="261" coveredstatements="257" conditionals="217" coveredconditionals="192" methods="26" coveredmethods="24" elements="504" coveredelements="473" complexity="0" loc="261" ncloc="261" packages="1" files="4" classes="4"/>
     <file name="db.ts" path="/Users/ivan/Project/3t.tools.intellij/mongo/mongo-schema-fetch/src/db.ts">
       <metrics statements="170" coveredstatements="168" conditionals="129" coveredconditionals="107" methods="12" coveredmethods="10"/>
