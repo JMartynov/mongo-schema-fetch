@@ -143,6 +143,63 @@ describe('inferSchema protection rules', () => {
             distinctFieldsAbortThreshold: 500
         }));
     });
+
+    it('should forward sanitizePii parameter to cleanSchema', async () => {
+        const findMock = vi.fn().mockReturnValue(Readable.from([]));
+        const mockDb = {
+            collection: () => ({
+                estimatedDocumentCount: () => Promise.resolve(50),
+                find: findMock
+            })
+        } as any;
+
+        const parserMock = vi.mocked(mongodbSchema) as any;
+        parserMock.mockClear();
+
+        parserMock.mockResolvedValueOnce({
+            fields: [
+                {
+                    name: "email",
+                    path: ["email"],
+                    type: "String",
+                    probability: 1,
+                    types: [
+                        {
+                            name: "String",
+                            path: ["email"],
+                            values: ["test@example.com"]
+                        }
+                    ]
+                }
+            ]
+        });
+
+        // With sanitizePii = true
+        const schemaWithSanitize = await inferSchema(mockDb, 'users', 1000, undefined, 20, true, undefined, undefined, true);
+        expect(schemaWithSanitize.fields[0].types[0].enumValues).toBeUndefined();
+
+        parserMock.mockResolvedValueOnce({
+            fields: [
+                {
+                    name: "email",
+                    path: ["email"],
+                    type: "String",
+                    probability: 1,
+                    types: [
+                        {
+                            name: "String",
+                            path: ["email"],
+                            values: ["test@example.com"]
+                        }
+                    ]
+                }
+            ]
+        });
+
+        // With sanitizePii = false (default)
+        const schemaWithoutSanitize = await inferSchema(mockDb, 'users', 1000, undefined, 20, true, undefined, undefined, false);
+        expect(schemaWithoutSanitize.fields[0].types[0].enumValues).toEqual(["test@example.com"]);
+    });
 });
 
 describe('Schema cleaning', () => {
@@ -296,7 +353,7 @@ describe('Schema cleaning', () => {
     });
 
     describe('cleanSchema PII mitigation', () => {
-        it('should drop enum values for fields matching PII name patterns', () => {
+        it('should drop enum values for fields matching PII name patterns when sanitizePii is true', () => {
             const rawSchema = {
                 fields: [
                     {
@@ -314,12 +371,12 @@ describe('Schema cleaning', () => {
                     }
                 ]
             };
-            const cleaned = cleanSchema(rawSchema, 20);
+            const cleaned = cleanSchema(rawSchema, 20, true);
             expect(cleaned.fields[0].types[0].enumValues).toBeUndefined();
             expect(cleaned.fields[0].types[0].values).toBeUndefined();
         });
 
-        it('should drop enum values for fields containing sensitive formatted values', () => {
+        it('should drop enum values for fields containing sensitive formatted values when sanitizePii is true', () => {
             const rawSchema = {
                 fields: [
                     {
@@ -337,8 +394,54 @@ describe('Schema cleaning', () => {
                     }
                 ]
             };
-            const cleaned = cleanSchema(rawSchema, 20);
+            const cleaned = cleanSchema(rawSchema, 20, true);
             expect(cleaned.fields[0].types[0].enumValues).toBeUndefined();
+            expect(cleaned.fields[0].types[0].values).toBeUndefined();
+        });
+
+        it('should NOT drop enum values for fields matching PII name patterns if sanitizePii is false (default)', () => {
+            const rawSchema = {
+                fields: [
+                    {
+                        name: "email",
+                        path: ["email"],
+                        type: "String",
+                        probability: 1,
+                        types: [
+                            {
+                                name: "String",
+                                path: ["email"],
+                                values: ["test@example.com", "other@example.com"]
+                            }
+                        ]
+                    }
+                ]
+            };
+            const cleaned = cleanSchema(rawSchema, 20, false);
+            expect(cleaned.fields[0].types[0].enumValues).toEqual(["test@example.com", "other@example.com"]);
+            expect(cleaned.fields[0].types[0].values).toBeUndefined();
+        });
+
+        it('should NOT drop enum values for fields containing sensitive formatted values if sanitizePii is false (default)', () => {
+            const rawSchema = {
+                fields: [
+                    {
+                        name: "custom_field",
+                        path: ["custom_field"],
+                        type: "String",
+                        probability: 1,
+                        types: [
+                            {
+                                name: "String",
+                                path: ["custom_field"],
+                                values: ["123-45-6789"]
+                            }
+                        ]
+                    }
+                ]
+            };
+            const cleaned = cleanSchema(rawSchema, 20, false);
+            expect(cleaned.fields[0].types[0].enumValues).toEqual(["123-45-6789"]);
             expect(cleaned.fields[0].types[0].values).toBeUndefined();
         });
     });

@@ -11,7 +11,8 @@ export async function inferSchema(
   enumThreshold = 20,
   storeValues = false,
   storedValuesLimit?: number,
-  distinctFieldsThreshold?: number
+  distinctFieldsThreshold?: number,
+  sanitizePii = false
 ): Promise<any> {
   const coll = db.collection(collectionName);
 
@@ -50,7 +51,7 @@ export async function inferSchema(
       storedValuesLengthLimit: storedValuesLimit,
       distinctFieldsAbortThreshold: distinctFieldsThreshold,
     });
-    return cleanSchema(schema, enumThreshold);
+    return cleanSchema(schema, enumThreshold, sanitizePii);
   } catch (err: any) {
     throw err;
   }
@@ -86,7 +87,7 @@ export function isSensitiveFieldOrValue(fieldName: string, values: any[]): boole
   return false;
 }
 
-export function cleanSchema(schema: any, enumThreshold: number): any {
+export function cleanSchema(schema: any, enumThreshold: number, sanitizePii = false): any {
   if (!schema) return schema;
 
   // Clone to avoid mutating original
@@ -107,8 +108,9 @@ export function cleanSchema(schema: any, enumThreshold: number): any {
               const uniqueValues = obj.values;
               const fieldName = (obj.path && obj.path.length > 0) ? obj.path[obj.path.length - 1] : '';
               
-              // Only save as enums if not a sensitive/PII field or value
-              if (!isSensitiveFieldOrValue(fieldName, uniqueValues)) {
+              // Only save as enums if not a sensitive/PII field or value (if sanitization is enabled)
+              const isSensitive = sanitizePii && isSensitiveFieldOrValue(fieldName, uniqueValues);
+              if (!isSensitive) {
                   if (uniqueValues.length > 0 && uniqueValues.length < enumThreshold) {
                       // We only keep string values if they are short (< 100 chars)
                       const filteredValues = uniqueValues.filter((v: any) => {

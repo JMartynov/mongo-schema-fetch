@@ -16,6 +16,7 @@ describe('CLI Unit tests (Argument parsing)', () => {
           .option('--store-values')
           .option('--stored-values-limit <number>', 'Stored values limit', parseInt)
           .option('--distinct-fields-threshold <number>', 'Distinct fields threshold', parseInt)
+          .option('--sanitize-pii')
           .option('--read-preference <mode>')
           .option('--quiet')
           .action(() => {}); // prevent execution
@@ -27,7 +28,8 @@ describe('CLI Unit tests (Argument parsing)', () => {
             '--db', 'test',
             '--read-preference', 'secondary',
             '--stored-values-limit', '42',
-            '--distinct-fields-threshold', '350'
+            '--distinct-fields-threshold', '350',
+            '--sanitize-pii'
         ]);
 
         const opts = program.opts();
@@ -37,5 +39,6 @@ describe('CLI Unit tests (Argument parsing)', () => {
         expect(opts.enumThreshold).toBe(20);
         expect(opts.storedValuesLimit).toBe(42);
         expect(opts.distinctFieldsThreshold).toBe(350);
+        expect(opts.sanitizePii).toBe(true);
     });
 });

@@ -15,5 +15,6 @@ describe('mongo-schema-fetch CLI', () => {
         expect(output).toContain('--quiet');
         expect(output).toContain('--stored-values-limit');
         expect(output).toContain('--distinct-fields-threshold');
+        expect(output).toContain('--sanitize-pii');
     });
 });

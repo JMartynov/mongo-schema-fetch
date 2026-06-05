@@ -67,6 +67,7 @@ If you have multiple collections, this will launch an interactive prompt asking 
 | `--store-values` | Enable value collection and enum extraction. By default, value collection is disabled for safety. | `false` |
 | `--stored-values-limit <number>` | Maximum number of unique sample values to collect and store per field. Only applicable if `--store-values` is active. | `100` |
 | `--distinct-fields-threshold <number>` | Abort threshold for distinct fields (keys) to avoid OOM on highly polymorphic collections. | None |
+| `--sanitize-pii` | Enable PII and credentials sanitization filter to drop sensitive enums (emails, passwords, SSNs, credit cards, etc.). Disabled by default. | `false` |
 | `--read-preference <mode>` | Specify read preference (e.g., `secondary`) for Replica Sets to avoid burdening the primary node. | None |
 | `--quiet` | Disable all interactive prompts and "Magic Link" upload requests. Essential for CI/CD environments. | `false` |
 | `--additional` | Enable collection of advanced execution query plan cache stats (`$planCacheStats`) and latency histograms (`$collStats`). | `false` |

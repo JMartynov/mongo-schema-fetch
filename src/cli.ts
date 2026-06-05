@@ -25,6 +25,7 @@ program
   .option('--store-values', 'Collect and store raw values in the schema analysis', false)
   .option('--stored-values-limit <number>', 'Maximum number of sample values to store per field', parseInt)
   .option('--distinct-fields-threshold <number>', 'Abort analysis if unique fields count exceeds this limit', parseInt)
+  .option('--sanitize-pii', 'Enable PII and credentials sanitization filter', false)
   .option('--read-preference <mode>', 'Read preference for Replica Sets (e.g. secondary)')
   .option('--quiet', 'Disable all interactive prompts (CI/CD mode)')
   .option('--query-file <path>', 'Path to a JSON file containing the query to analyze')
@@ -169,7 +170,8 @@ program
           options.enumThreshold,
           options.storeValues,
           options.storedValuesLimit,
-          options.distinctFieldsThreshold
+          options.distinctFieldsThreshold,
+          options.sanitizePii
         );
 
         collectionsData.push({

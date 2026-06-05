@@ -7,6 +7,7 @@ v1.2.0
 - Added --stored-values-limit <number> to configure storedValuesLengthLimit (default 100).
 - Added --distinct-fields-threshold <number> to configure distinctFieldsAbortThreshold to prevent OOM errors on highly polymorphic collections.
 - Implemented robust PII and credentials sanitization filter (emails, passwords, SSNs, credit cards, IP addresses, API keys).
+- Changed PII/credentials sanitization filter to be disabled by default. Added --sanitize-pii CLI option to enable it on demand when --store-values is active.
 - Added dedicated run-security-tests.sh test harness and CI pipeline for zero-leak validation.
 
 =========================================
