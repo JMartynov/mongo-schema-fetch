@@ -13,16 +13,29 @@ describe('CLI Unit tests (Argument parsing)', () => {
           .option('--out <path>', 'Output file path', 'schema-payload.json')
           .option('--sample <number>', 'Custom sample limit', parseInt)
           .option('--enum-threshold <number>', 'Threshold', parseInt, 20)
+          .option('--store-values')
+          .option('--stored-values-limit <number>', 'Stored values limit', parseInt)
+          .option('--distinct-fields-threshold <number>', 'Distinct fields threshold', parseInt)
           .option('--read-preference <mode>')
           .option('--quiet')
           .action(() => {}); // prevent execution
 
-        program.parse(['node', 'cli.js', 'mongodb://localhost', '--db', 'test', '--read-preference', 'secondary']);
+        program.parse([
+            'node',
+            'cli.js',
+            'mongodb://localhost',
+            '--db', 'test',
+            '--read-preference', 'secondary',
+            '--stored-values-limit', '42',
+            '--distinct-fields-threshold', '350'
+        ]);
 
         const opts = program.opts();
         expect(opts.db).toBe('test');
         expect(opts.readPreference).toBe('secondary');
         expect(opts.out).toBe('schema-payload.json');
         expect(opts.enumThreshold).toBe(20);
+        expect(opts.storedValuesLimit).toBe(42);
+        expect(opts.distinctFieldsThreshold).toBe(350);
     });
 });

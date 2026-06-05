@@ -65,6 +65,8 @@ If you have multiple collections, this will launch an interactive prompt asking 
 | `--sample <number>` | Custom document sample limit for schema inference. Overrides the smart dynamic limit. | Dynamic (50-1000) |
 | `--enum-threshold <number>` | Threshold limit for saving enum values. If unique values in a field are below this number, they are saved. Only active when `--store-values` is enabled. | `20` |
 | `--store-values` | Enable value collection and enum extraction. By default, value collection is disabled for safety. | `false` |
+| `--stored-values-limit <number>` | Maximum number of unique sample values to collect and store per field. Only applicable if `--store-values` is active. | `100` |
+| `--distinct-fields-threshold <number>` | Abort threshold for distinct fields (keys) to avoid OOM on highly polymorphic collections. | None |
 | `--read-preference <mode>` | Specify read preference (e.g., `secondary`) for Replica Sets to avoid burdening the primary node. | None |
 | `--quiet` | Disable all interactive prompts and "Magic Link" upload requests. Essential for CI/CD environments. | `false` |
 | `--additional` | Enable collection of advanced execution query plan cache stats (`$planCacheStats`) and latency histograms (`$collStats`). | `false` |

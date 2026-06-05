@@ -13,5 +13,7 @@ describe('mongo-schema-fetch CLI', () => {
         const output = execSync('node dist/cli.js --help', { encoding: 'utf8' });
         expect(output).toContain('Usage: mongo-schema-fetch');
         expect(output).toContain('--quiet');
+        expect(output).toContain('--stored-values-limit');
+        expect(output).toContain('--distinct-fields-threshold');
     });
 });

@@ -3,7 +3,16 @@ import { Db } from 'mongodb';
 import mongodbSchema from 'mongodb-schema';
 import { Readable } from 'stream';
 
-export async function inferSchema(db: Db, collectionName: string, avgObjSize: number, customSampleLimit?: number, enumThreshold = 20, storeValues = false): Promise<any> {
+export async function inferSchema(
+  db: Db,
+  collectionName: string,
+  avgObjSize: number,
+  customSampleLimit?: number,
+  enumThreshold = 20,
+  storeValues = false,
+  storedValuesLimit?: number,
+  distinctFieldsThreshold?: number
+): Promise<any> {
   const coll = db.collection(collectionName);
 
   let limit = 1000;
@@ -35,7 +44,12 @@ export async function inferSchema(db: Db, collectionName: string, avgObjSize: nu
 
   try {
     const parser = (mongodbSchema as any).default || mongodbSchema;
-    const schema = await parser(readableStream, { semanticTypes: true, storeValues });
+    const schema = await parser(readableStream, {
+      semanticTypes: true,
+      storeValues,
+      storedValuesLengthLimit: storedValuesLimit,
+      distinctFieldsAbortThreshold: distinctFieldsThreshold,
+    });
     return cleanSchema(schema, enumThreshold);
   } catch (err: any) {
     throw err;

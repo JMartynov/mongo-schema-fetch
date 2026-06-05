@@ -23,6 +23,8 @@ program
   .option('--sample <number>', 'Custom sample limit for schema inference', parseInt)
   .option('--enum-threshold <number>', 'Threshold for saving enum values', parseInt, 20)
   .option('--store-values', 'Collect and store raw values in the schema analysis', false)
+  .option('--stored-values-limit <number>', 'Maximum number of sample values to store per field', parseInt)
+  .option('--distinct-fields-threshold <number>', 'Abort analysis if unique fields count exceeds this limit', parseInt)
   .option('--read-preference <mode>', 'Read preference for Replica Sets (e.g. secondary)')
   .option('--quiet', 'Disable all interactive prompts (CI/CD mode)')
   .option('--query-file <path>', 'Path to a JSON file containing the query to analyze')
@@ -159,7 +161,16 @@ program
 
         const stats = await fetchCollectionStats(db, collName, { additional: options.additional });
         const indexes = await fetchCollectionIndexes(db, collName);
-        const schema = await inferSchema(db, collName, stats.avgObjSize, options.sample, options.enumThreshold, options.storeValues);
+        const schema = await inferSchema(
+          db,
+          collName,
+          stats.avgObjSize,
+          options.sample,
+          options.enumThreshold,
+          options.storeValues,
+          options.storedValuesLimit,
+          options.distinctFieldsThreshold
+        );
 
         collectionsData.push({
           stats,

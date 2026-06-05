@@ -122,6 +122,27 @@ describe('inferSchema protection rules', () => {
             storeValues: true
         }));
     });
+
+    it('should forward storedValuesLimit and distinctFieldsThreshold to parser if provided', async () => {
+        const findMock = vi.fn().mockReturnValue(Readable.from([]));
+        const mockDb = {
+            collection: () => ({
+                estimatedDocumentCount: () => Promise.resolve(50),
+                find: findMock
+            })
+        } as any;
+
+        const parserMock = vi.mocked(mongodbSchema) as any;
+        parserMock.mockClear();
+
+        await inferSchema(mockDb, 'users', 1000, undefined, 20, true, 50, 500);
+        expect(parserMock).toHaveBeenCalledWith(expect.any(Readable), expect.objectContaining({
+            semanticTypes: true,
+            storeValues: true,
+            storedValuesLengthLimit: 50,
+            distinctFieldsAbortThreshold: 500
+        }));
+    });
 });
 
 describe('Schema cleaning', () => {
