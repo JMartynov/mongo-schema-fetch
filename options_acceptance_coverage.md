@@ -70,3 +70,53 @@ This report evaluates which `mongo-schema-fetch` command-line options are covere
 * **`--no-retry-writes`**, **`--no-retry-reads`**, **`--no-direct-connection`**, **`--no-write-concern-j`**: The positive forms are verified in the comprehensive connection test case, but the negated versions are only handled implicitly by the Commander options structure.
 * **`--auth-mechanism-properties <properties>`**: Configured in parser but not used in the authentication scenarios.
 * **`--load-balanced`**: Requires a specialized load-balanced MongoDB cluster configuration (e.g. behind a proxy), which is not easily reproducible in standard single-container testcontainers environments.
+
+---
+
+## 📅 Test Implementation & Invariants Plan
+
+To achieve comprehensive acceptance test coverage across all options, we will implement new Gherkin scenarios and step definitions covering the missing options and their key invariants:
+
+### 1. New Gherkin Scenarios (`features/cli-acceptance.feature`)
+
+#### A. Target Collection Selection (`--collections`)
+* **Scenario**: Fetch schema targeting a specific collection.
+* **Coverage**: `--collections <list>`
+* **Verification**: Assert that only the specified collection is included in the payload, and others are ignored.
+
+#### B. Negated Connection Options
+* **Scenario**: Fetch schema with negated connection options.
+* **Coverage**: `--no-retry-writes`, `--no-retry-reads`, `--no-direct-connection`, `--no-write-concern-j`
+* **Verification**: Run CLI with these negated flags and assert exit code `0`.
+
+#### C. Pipeline Auto-Analysis (`--query-file` and `--auto-analyze`)
+* **Scenarios**: 
+  1. Auto-analyze passes when query is optimized (no `"fail_test"`).
+  2. Auto-analyze fails when query degrades performance (contains `"fail_test"`).
+* **Coverage**: `--query-file <path>`, `--auto-analyze`
+* **Verification**: Verify that exit codes accurately represent optimization check results (exit code `0` for pass, `1` for fail).
+
+#### D. Value Limits & PII Option Flags (`--store-values`, `--stored-values-limit`, `--sanitize-pii`)
+* **Scenario**: Fetch schema with customized stored values limit and PII sanitization.
+* **Coverage**: `--store-values`, `--stored-values-limit`, `--sanitize-pii`
+* **Verification**: Assert that values are stored but only up to the specified limit and sensitive fields are filtered.
+
+#### E. Edge Case & Invariant Violations (Invalid Options)
+* **Scenario 1**: CLI fails if distinct fields threshold is exceeded (`--distinct-fields-threshold`).
+  * **Invariant**: When the unique keys count in a collection exceeds `distinctFieldsAbortThreshold`, the parser throws an abort error.
+  * **Test**: Set `--distinct-fields-threshold 1` on a collection with `name` and `age` fields, verifying it exits with `1`.
+* **Scenario 2**: Fetch schema fails if load balanced option is enabled on standalone connection (`--load-balanced`).
+  * **Invariant**: The MongoDB driver throws `MongoInvalidArgumentError` if `loadBalanced` is set for standalone/replica sets.
+  * **Test**: Run with `--load-balanced` and assert exit code `1`.
+
+### 2. Step Definition Extensions (`features/step_definitions/cli.steps.ts`)
+* Implement step definitions matching:
+  - `When I run mongo-schema-fetch with "--collections users" and quiet mode` (checks `--collections`)
+  - `When I run mongo-schema-fetch with username, password, and negated connection parameters and quiet mode` (checks `--no-retry-writes` etc.)
+  - `Given a query file {string} containing {string}` (creates temporary query file)
+  - `When I run mongo-schema-fetch with "--all-collections --query-file query-ok.json --auto-analyze" and quiet mode` (checks auto-analyze)
+  - `When I run mongo-schema-fetch with "--store-values --stored-values-limit 1 --distinct-fields-threshold 50 --sanitize-pii --all-collections" and quiet mode` (checks stored values limit)
+  - `When I run mongo-schema-fetch with "--all-collections --distinct-fields-threshold 1" and quiet mode` (checks distinct fields threshold abort)
+  - `When I run mongo-schema-fetch with "--load-balanced --all-collections" and quiet mode` (checks load-balanced error handling)
+  - Extend the existing `When I run mongo-schema-fetch with all extended connection options...` step to include `--auth-mechanism-properties SERVICE_NAME:mongodb` to cover `--auth-mechanism-properties`.
+
