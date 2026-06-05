@@ -486,6 +486,38 @@ Given('a query file {string} containing {string}', (filename: string, content: s
   createdFiles.push(filePath);
 });
 
+Then('the field {string} in {string} should only contain enum values of length at most {int}', (fieldName: string, collectionName: string, maxLength: number) => {
+  const payload = JSON.parse(fs.readFileSync(outPath, 'utf8'));
+  const coll = payload.collections.find((c: any) => c.stats.name === collectionName);
+  assert.ok(coll, `Collection ${collectionName} not found`);
+
+  const field = coll.schema.fields.find((f: any) => f.name === fieldName);
+  assert.ok(field, `Field ${fieldName} not found`);
+
+  const typeDesc = field.types.find((t: any) => t.name === 'String');
+  assert.ok(typeDesc, `String type descriptor for field ${fieldName} not found`);
+  assert.ok(typeDesc.enumValues, `enumValues not found for field ${fieldName}`);
+  for (const val of typeDesc.enumValues) {
+    assert.ok(val.length <= maxLength, `Expected enum value "${val}" to have length at most ${maxLength}, but got length ${val.length}`);
+  }
+});
+
+
+Then('the field {string} in {string} should have no enum values', (fieldName: string, collectionName: string) => {
+  const payload = JSON.parse(fs.readFileSync(outPath, 'utf8'));
+  const coll = payload.collections.find((c: any) => c.stats.name === collectionName);
+  assert.ok(coll, `Collection ${collectionName} not found`);
+
+  const field = coll.schema.fields.find((f: any) => f.name === fieldName);
+  assert.ok(field, `Field ${fieldName} not found`);
+
+  const typeDesc = field.types.find((t: any) => t.name === 'String' || t.name === 'Number');
+  if (typeDesc) {
+    assert.ok(!typeDesc.enumValues || typeDesc.enumValues.length === 0, `Expected no enum values, but found ${JSON.stringify(typeDesc.enumValues)}`);
+  }
+});
+
+
 
 
 

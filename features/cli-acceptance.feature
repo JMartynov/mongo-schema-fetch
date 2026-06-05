@@ -248,4 +248,54 @@ Feature: CLI runs against different MongoDB versions and configurations
     When I run mongo-schema-fetch with "--load-balanced --all-collections" and quiet mode
     Then the exit code should be 1
 
+  Scenario: Auto-analyze fails if query-file is not provided
+    Given a running MongoDB "mongo:7.0" container in "standalone" configuration
+    When I run mongo-schema-fetch with "--all-collections --auto-analyze" and quiet mode
+    Then the exit code should be 1
+
+  Scenario: Fetch schema targeting a non-existent collection
+    Given a running MongoDB "mongo:7.0" container in "standalone" configuration
+    And the database has collection "users" with documents:
+      | name  | age | role  |
+      | Alice | 30  | admin |
+    When I run mongo-schema-fetch with "--collections users,nonexistent" and quiet mode
+    Then the exit code should be 0
+    And the output payload should contain collection "users"
+    And the output payload should not contain collection "nonexistent"
+
+  Scenario: Fetch schema with store-values and stored-values-limit
+    Given a running MongoDB "mongo:7.0" container in "standalone" configuration
+    And the database has collection "users" with documents:
+      | name  | age | role  |
+      | Alice | 30  | admin |
+      | Bob   | 25  | user  |
+    When I run mongo-schema-fetch with "--store-values --stored-values-limit 1 --all-collections" and quiet mode
+    Then the exit code should be 0
+    And the output payload should contain collection "users"
+    And the field "role" in "users" should only contain enum values of length at most 1
+
+
+  Scenario: Fetch schema with enum-threshold below unique values count
+    Given a running MongoDB "mongo:7.0" container in "standalone" configuration
+    And the database has collection "users" with documents:
+      | name  | age | role  |
+      | Alice | 30  | admin |
+      | Bob   | 25  | user  |
+    When I run mongo-schema-fetch with "--store-values --enum-threshold 2 --all-collections" and quiet mode
+    Then the exit code should be 0
+    And the output payload should contain collection "users"
+    And the field "role" in "users" should have no enum values
+
+  Scenario: Fetch schema with sanitize-pii removes enum values for sensitive fields
+    Given a running MongoDB "mongo:7.0" container in "standalone" configuration
+    And the database has collection "users" with documents:
+      | email             | age | role  |
+      | alice@example.com | 30  | admin |
+      | bob@example.com   | 25  | user  |
+    When I run mongo-schema-fetch with "--store-values --sanitize-pii --all-collections" and quiet mode
+    Then the exit code should be 0
+    And the output payload should contain collection "users"
+    And the field "email" in "users" should have no enum values
+
+
 
