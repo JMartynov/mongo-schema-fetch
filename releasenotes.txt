@@ -1,6 +1,14 @@
 Release Notes - mongo-schema-fetch
 
 =========================================
+v1.3.0
+- Added support for local server upload.
+- Implemented inline query capabilities.
+- Added machine-readable mode.
+- Introduced dedicated file logger.
+- Improved test stability and coverage.
+
+=========================================
 v1.2.1
 - Default schema inference value extraction (storeValues) to false to enforce Zero Data Leak Policy.
 - Added --store-values CLI option to explicitly opt-in to value/enum collection.
