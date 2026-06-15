@@ -6,6 +6,7 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import assert from 'assert';
+import http from 'http';
 import { generateCerts, cleanupCerts, getCertPaths } from '../../test/certs-helper.js';
 
 setDefaultTimeout(180000); // 3 minutes timeout for pulling images and starting containers
@@ -15,26 +16,38 @@ let client: MongoClient;
 let mongoUri: string;
 let runExitCode: number;
 let lastRunError = '';
+let lastRunStdout = '';
 const dbName = 'testdb';
 const outPath = path.join(process.cwd(), 'features-payload.json');
 
 export let isTlsScenario = false;
 export let isX509Scenario = false;
 
+let mockServerProcess: any = null;
+let receivedPayload: any = null;
+let receivedQuery: any = null;
+
 Before(() => {
   isTlsScenario = false;
   isX509Scenario = false;
   lastRunError = '';
+  lastRunStdout = '';
+  receivedPayload = null;
+  receivedQuery = null;
+  if (fs.existsSync('mock-server-received.json')) {
+    try { fs.unlinkSync('mock-server-received.json'); } catch (e) {}
+  }
 });
 
 function runCliCommand(cmd: string, env: any = {}) {
   try {
     lastRunError = '';
-    execSync(cmd, { stdio: 'pipe', env: { ...process.env, ...env } });
+    lastRunStdout = execSync(cmd, { stdio: 'pipe', env: { ...process.env, ...env } }).toString();
     runExitCode = 0;
   } catch (err: any) {
     runExitCode = err.status ?? 1;
     lastRunError = err.stderr?.toString() || err.message;
+    lastRunStdout = err.stdout?.toString() || '';
   }
 }
 
@@ -64,6 +77,21 @@ After(async () => {
   if (fs.existsSync(outPath)) {
     fs.unlinkSync(outPath);
   }
+  if (mockServerProcess) {
+    try {
+      mockServerProcess.kill();
+    } catch (e) {}
+    mockServerProcess = null;
+  }
+  if (fs.existsSync('mock-server-received.json')) {
+    try { fs.unlinkSync('mock-server-received.json'); } catch (e) {}
+  }
+  if (fs.existsSync('schema-fetch.log')) {
+    try { fs.unlinkSync('schema-fetch.log'); } catch (e) {}
+  }
+  if (fs.existsSync('custom-fetch.log')) {
+    try { fs.unlinkSync('custom-fetch.log'); } catch (e) {}
+  }
   for (const f of createdFiles) {
     if (fs.existsSync(f)) {
       try {
@@ -75,13 +103,28 @@ After(async () => {
 });
 
 Given('a running MongoDB {string} container in {string} configuration', async (version: string, config: string) => {
-  if (config === 'auth') {
-    container = await new MongoDBContainer(version)
-      .withUsername('admin')
-      .withPassword('password')
-      .start();
-  } else {
-    container = await new MongoDBContainer(version).start();
+  let attempts = 3;
+  while (attempts > 0) {
+    try {
+      if (config === 'auth') {
+        container = await new MongoDBContainer(version)
+          .withUsername('admin')
+          .withPassword('password')
+          .start();
+      } else {
+        container = await new MongoDBContainer(version).start();
+      }
+      break;
+    } catch (err: any) {
+      attempts--;
+      if (attempts === 0) throw err;
+      console.warn(`⚠️ Testcontainers startup failed, retrying (${attempts} attempts left): ${err.message}`);
+      if (container) {
+        try { await container.stop(); } catch (e) {}
+        container = null;
+      }
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
   }
 
   const baseUri = container.getConnectionString();
@@ -92,7 +135,22 @@ Given('a running MongoDB {string} container in {string} configuration', async (v
 });
 
 Given('a running MongoDB {string} replica set cluster container', async (version: string) => {
-  container = await new MongoDBContainer(version).start();
+  let attempts = 3;
+  while (attempts > 0) {
+    try {
+      container = await new MongoDBContainer(version).start();
+      break;
+    } catch (err: any) {
+      attempts--;
+      if (attempts === 0) throw err;
+      console.warn(`⚠️ Testcontainers startup failed, retrying (${attempts} attempts left): ${err.message}`);
+      if (container) {
+        try { await container.stop(); } catch (e) {}
+        container = null;
+      }
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+  }
   const baseUri = container.getConnectionString();
   mongoUri = baseUri.includes('?') ? `${baseUri}&directConnection=true` : `${baseUri}?directConnection=true`;
   if (!mongoUri.includes('replicaSet=')) {
@@ -201,27 +259,42 @@ Then('the output payload should have buildInfo version matching {string}', (expe
 Given('a running MongoDB container with TLS enabled', async () => {
   isTlsScenario = true;
   const paths = getCertPaths();
-  container = await new GenericContainer("mongo:7.0")
-    .withExposedPorts(27017)
-    .withCopyFilesToContainer([
-      {
-        source: paths.serverPem,
-        target: "/etc/ssl/server.pem"
-      },
-      {
-        source: paths.caPem,
-        target: "/etc/ssl/ca.pem"
+  let attempts = 3;
+  while (attempts > 0) {
+    try {
+      container = await new GenericContainer("mongo:7.0")
+        .withExposedPorts(27017)
+        .withCopyFilesToContainer([
+          {
+            source: paths.serverPem,
+            target: "/etc/ssl/server.pem"
+          },
+          {
+            source: paths.caPem,
+            target: "/etc/ssl/ca.pem"
+          }
+        ])
+        .withCommand([
+          "--tlsMode", "requireTLS",
+          "--tlsCertificateKeyFile", "/etc/ssl/server.pem",
+          "--tlsCAFile", "/etc/ssl/ca.pem",
+          "--tlsAllowConnectionsWithoutCertificates",
+          "--bind_ip_all"
+        ])
+        .withWaitStrategy(Wait.forLogMessage(/Waiting for connections/))
+        .start();
+      break;
+    } catch (err: any) {
+      attempts--;
+      if (attempts === 0) throw err;
+      console.warn(`⚠️ Testcontainers startup failed, retrying (${attempts} attempts left): ${err.message}`);
+      if (container) {
+        try { await container.stop(); } catch (e) {}
+        container = null;
       }
-    ])
-    .withCommand([
-      "--tlsMode", "requireTLS",
-      "--tlsCertificateKeyFile", "/etc/ssl/server.pem",
-      "--tlsCAFile", "/etc/ssl/ca.pem",
-      "--tlsAllowConnectionsWithoutCertificates",
-      "--bind_ip_all"
-    ])
-    .withWaitStrategy(Wait.forLogMessage(/Waiting for connections/))
-    .start();
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+  }
 
   const mappedPort = container.getMappedPort(27017);
   const host = container.getHost();
@@ -282,31 +355,46 @@ Given('a running MongoDB container with TLS and MONGODB-X509 auth enabled', asyn
   isTlsScenario = true;
   isX509Scenario = true;
   const paths = getCertPaths();
-  container = await new GenericContainer("mongo:7.0")
-    .withExposedPorts(27017)
-    .withCopyFilesToContainer([
-      {
-        source: paths.serverPem,
-        target: "/etc/ssl/server.pem"
-      },
-      {
-        source: paths.caPem,
-        target: "/etc/ssl/ca.pem"
-      },
-      {
-        source: paths.clientPem,
-        target: "/etc/ssl/client.pem"
+  let attempts = 3;
+  while (attempts > 0) {
+    try {
+      container = await new GenericContainer("mongo:7.0")
+        .withExposedPorts(27017)
+        .withCopyFilesToContainer([
+          {
+            source: paths.serverPem,
+            target: "/etc/ssl/server.pem"
+          },
+          {
+            source: paths.caPem,
+            target: "/etc/ssl/ca.pem"
+          },
+          {
+            source: paths.clientPem,
+            target: "/etc/ssl/client.pem"
+          }
+        ])
+        .withCommand([
+          "--tlsMode", "requireTLS",
+          "--tlsCertificateKeyFile", "/etc/ssl/server.pem",
+          "--tlsCAFile", "/etc/ssl/ca.pem",
+          "--auth",
+          "--bind_ip_all"
+        ])
+        .withWaitStrategy(Wait.forLogMessage(/Waiting for connections/))
+        .start();
+      break;
+    } catch (err: any) {
+      attempts--;
+      if (attempts === 0) throw err;
+      console.warn(`⚠️ Testcontainers startup failed, retrying (${attempts} attempts left): ${err.message}`);
+      if (container) {
+        try { await container.stop(); } catch (e) {}
+        container = null;
       }
-    ])
-    .withCommand([
-      "--tlsMode", "requireTLS",
-      "--tlsCertificateKeyFile", "/etc/ssl/server.pem",
-      "--tlsCAFile", "/etc/ssl/ca.pem",
-      "--auth",
-      "--bind_ip_all"
-    ])
-    .withWaitStrategy(Wait.forLogMessage(/Waiting for connections/))
-    .start();
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+  }
 
   const execResult = await container.exec([
     "mongosh",
@@ -412,6 +500,113 @@ Then('the field {string} in {string} should have no enum values', (fieldName: st
     assert.ok(!typeDesc.enumValues || typeDesc.enumValues.length === 0, `Expected no enum values, but found ${JSON.stringify(typeDesc.enumValues)}`);
   }
 });
+
+When('I run mongo-schema-fetch with parameters {string}', (params: string) => {
+  let fullParams = params;
+  if (!params.startsWith('"mongodb://') && !params.startsWith('mongodb://')) {
+    fullParams = `"${mongoUri}" --db ${dbName} --out ${outPath} ${params}`;
+  }
+  runCliCommand(`node dist/cli.js ${fullParams}`);
+});
+
+Then('the error output should contain {string}', (expectedMsg: string) => {
+  assert.ok(lastRunError.toLowerCase().includes(expectedMsg.toLowerCase()), `Expected error output to contain "${expectedMsg}", but got: "${lastRunError}"`);
+});
+
+Given('a mock local server is listening on port {int}', async (port: number) => {
+  const { spawn } = await import('child_process');
+
+  if (fs.existsSync('mock-server-received.json')) {
+    try { fs.unlinkSync('mock-server-received.json'); } catch (e) {}
+  }
+
+  const serverScript = `
+    const http = require('http');
+    const fs = require('fs');
+    const server = http.createServer((req, res) => {
+      if (req.method === 'POST' && req.url === '/api/jobs') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', () => {
+          try {
+            fs.writeFileSync('mock-server-received.json', body, 'utf8');
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ id: 'mock-job-xyz' }));
+          } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'text/plain' });
+            res.end('Error writing file');
+          }
+        });
+      } else {
+        res.writeHead(404);
+        res.end();
+      }
+    });
+    server.listen(${port}, () => {
+      console.log('LISTENING');
+    });
+  `;
+
+  mockServerProcess = spawn('node', ['-e', serverScript]);
+
+  await new Promise<void>((resolve) => {
+    let resolved = false;
+    mockServerProcess.stdout.on('data', (data: any) => {
+      if (data.toString().includes('LISTENING') && !resolved) {
+        resolved = true;
+        resolve();
+      }
+    });
+    setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        resolve();
+      }
+    }, 1000);
+  });
+});
+
+Then('the mock local server should have received the payload with collection {string} and query matching {string}', (collectionName: string, queryField: string) => {
+  const receivedFile = path.join(process.cwd(), 'mock-server-received.json');
+  assert.ok(fs.existsSync(receivedFile), 'No payload was received by the mock server (received file missing)');
+
+  const rawData = fs.readFileSync(receivedFile, 'utf8');
+  const data = JSON.parse(rawData);
+  receivedPayload = data.schema;
+  receivedQuery = data.query;
+
+  assert.ok(receivedPayload, 'No schema payload was found in the received body');
+  const coll = receivedPayload.collections.find((c: any) => c.stats.name === collectionName);
+  assert.ok(coll, `Collection ${collectionName} was not found in the received schema payload`);
+  assert.ok(receivedQuery, 'No query was received by the mock server');
+  const queryString = JSON.stringify(receivedQuery);
+  assert.ok(queryString.includes(queryField), `Expected query to match "${queryField}", but got: ${queryString}`);
+});
+
+Then('the terminal output should contain {string}', (expectedText: string) => {
+  const combinedOutput = lastRunStdout + lastRunError;
+  assert.ok(combinedOutput.toLowerCase().includes(expectedText.toLowerCase()), `Expected output to contain "${expectedText}", but got: "${combinedOutput}"`);
+});
+
+Then('the terminal output should be completely empty', () => {
+  const cleanStdout = lastRunStdout.trim();
+  assert.strictEqual(cleanStdout, '', `Expected terminal output to be empty, but got: "${cleanStdout}"`);
+});
+
+Then('the log file {string} should exist and contain UTC timestamps', (logFilename: string) => {
+  const logPath = path.join(process.cwd(), logFilename);
+  assert.ok(fs.existsSync(logPath), `Log file ${logFilename} does not exist`);
+  const content = fs.readFileSync(logPath, 'utf8');
+  assert.ok(content.length > 0, 'Log file is empty');
+  assert.ok(/\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC\]/.test(content), 'Log file does not contain properly formatted UTC timestamps');
+});
+
+Then('the output payload {string} should exist', (outFilename: string) => {
+  const targetOutPath = path.join(process.cwd(), outFilename);
+  assert.ok(fs.existsSync(targetOutPath), `Output payload ${outFilename} does not exist`);
+  createdFiles.push(targetOutPath); // register for cleanup
+});
+
 
 
 

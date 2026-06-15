@@ -5,7 +5,8 @@ import { connectToDb, fetchServerContext, getCollectionNames, fetchCollectionSta
 import { inferSchema } from './schema.js';
 import { validatePayload } from './validation.js';
 import { promptForCollections } from './interactive.js';
-import { promptAndUploadMagicLink, autoAnalyze } from './upload.js';
+import { promptAndUploadMagicLink, autoAnalyze, submitToLiteServer } from './upload.js';
+import { initLogger, logInfo, logWarn, logError, logDebug } from './logger.js';
 import fs from 'fs';
 import path from 'path';
 import prompts from 'prompts';
@@ -31,6 +32,10 @@ program
   .option('--query-file <path>', 'Path to a JSON file containing the query to analyze')
   .option('--auto-analyze', 'Automatically send the schema and query to the API and exit based on results')
   .option('--additional', 'Collect additional plan cache and latency stats', false)
+  .option('--server <[host:]port>', 'Local server address and port to send schema and query to')
+  .option('--query <string>', 'Raw JSON query string to analyze')
+  .option('--machine', 'Enable headless machine mode (no console UI, writes logs to file, silent console)')
+  .option('--log-file <path>', 'Specify custom log file path')
   .option('-u, --username <username>', 'MongoDB username')
   .option('-p, --password [password]', 'MongoDB password')
   .option('--auth-source <database>', 'Database containing user credentials')
@@ -63,17 +68,91 @@ program
   .option('--write-concern-wtimeout-ms <ms>', 'Write concern wtimeoutMS parameter')
   .option('--read-concern-level <level>', 'Read concern level')
   .action(async (uri, options) => {
-    if (options.autoAnalyze && !options.queryFile) {
-      console.error("❌ Error: --query-file must be provided when using --auto-analyze");
-      process.exit(1);
-    }
     let client;
+    let exitCode = 0;
     try {
+      // 1. Initialize Logger Configuration
+      let logPath: string | null = null;
+      if (options.logFile) {
+        logPath = options.logFile;
+      } else if (options.machine) {
+        logPath = 'schema-fetch.log';
+      }
+      initLogger(logPath, !!options.machine);
+
+      // 2. Print ASCII Banner and visual note (in non-machine mode)
+      if (!options.machine) {
+        const asciiBanner = `
+\x1b[36m=====================================================
+   ___ ___ ___  _ __   __ _  ___        ___  ___  
+  /   \\   \\   \\| '_ \\ / _\` |/ _ \\_____ /   \\/ __| 
+ |  |  |  |  | | | | | (_| | (_) |_____|  |  \\__ \\ 
+  \\___/\\___/\\__|_| |_|\\__, |\\___/       \\___/___/ 
+                      |___/                       
+  MongoDB Schema Blueprint & Query Performance Fetcher
+=====================================================\x1b[0m`;
+
+        const visualNote = `
+\x1b[33mVisual Notes:\x1b[0m
+- Extracts schema blueprint & index structure without database raw values.
+- Validates the JSON schema payload structure.
+- Transmits to target server for modeling query optimization.
+`;
+        logInfo(asciiBanner);
+        logInfo(visualNote);
+      }
+
+      logDebug(`cli arguments: ${JSON.stringify(options)}`);
+
+      // 3. Validations
+      if (options.autoAnalyze && !options.queryFile) {
+        logError("Error: --query-file must be provided when using --auto-analyze");
+        exitCode = 1;
+        return;
+      }
+
+      if (options.server) {
+        if (!options.query && !options.queryFile) {
+          logError("Error: --query or --query-file must be provided when using --server");
+          exitCode = 1;
+          return;
+        }
+      }
+
+      let queryObj: any = null;
+      if (options.query) {
+        try {
+          queryObj = JSON.parse(options.query);
+        } catch (err: any) {
+          logError("Error: --query must be valid JSON");
+          exitCode = 1;
+          return;
+        }
+      } else if (options.queryFile) {
+        const queryPath = path.resolve(options.queryFile);
+        if (!fs.existsSync(queryPath)) {
+          logError(`Error: Query file not found: ${options.queryFile}`);
+          exitCode = 1;
+          return;
+        }
+        if (options.server) {
+          try {
+            queryObj = JSON.parse(fs.readFileSync(queryPath, 'utf-8'));
+          } catch (err: any) {
+            logError(`Error: Query file does not contain valid JSON: ${err.message}`);
+            exitCode = 1;
+            return;
+          }
+        } else {
+          queryObj = fs.readFileSync(queryPath, 'utf-8');
+        }
+      }
+
       let password = options.password;
       if (password === undefined) {
         password = process.env.MONGODB_PASSWORD || process.env.MONGODB_PASS;
       }
-      if (options.username && password === undefined && !options.quiet) {
+      if (options.username && password === undefined && !options.quiet && !options.machine) {
         const response = await prompts({
           type: 'password',
           name: 'pwd',
@@ -120,6 +199,10 @@ program
         readConcernLevel: options.readConcernLevel,
       };
 
+      // Stage 1: Connecting
+      logInfo('\x1b[36m[1/4] 🔌 Connecting to database...\x1b[0m');
+      logDebug(`Attempting connection to URI: ${uri.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@')}`);
+
       const dbConnection = await connectToDb(uri, connectionOptions);
       client = dbConnection.client;
       let db = dbConnection.db;
@@ -128,7 +211,7 @@ program
         db = client.db(options.db);
       }
 
-      console.log(`📡 Connected to MongoDB database: ${db.databaseName}`);
+      logInfo(`📡 Connected to MongoDB database: ${db.databaseName}`);
 
       const serverContext = await fetchServerContext(db);
 
@@ -138,27 +221,29 @@ program
 
       if (options.collections) {
          targetCollections = options.collections.split(',').map((c: string) => c.trim());
-      } else if (options.allCollections || options.quiet) {
+      } else if (options.allCollections || options.quiet || options.machine) {
          targetCollections = allCollections;
       } else {
          targetCollections = await promptForCollections(allCollections);
       }
 
       if (targetCollections.length === 0) {
-        console.log("No collections selected. Exiting.");
-        process.exit(0);
+        logInfo("No collections selected. Exiting.");
+        return;
       }
 
-      console.log(`\n🔍 Scanning ${targetCollections.length} collections...`);
+      // Stage 2: Extraction
+      logInfo('\x1b[36m[2/4] 🔍 Extracting schemas & indexes...\x1b[0m');
+      logInfo(`Scanning ${targetCollections.length} collections...`);
       const collectionsData = [];
 
       for (const collName of targetCollections) {
         if (!allCollections.includes(collName)) {
-           console.warn(`⚠️ Collection '${collName}' not found in database. Skipping.`);
+           logWarn(`⚠️ Collection '${collName}' not found in database. Skipping.`);
            continue;
         }
 
-        console.log(`  -> Processing: ${collName}`);
+        logInfo(`  -> Processing: ${collName}`);
 
         const stats = await fetchCollectionStats(db, collName, { additional: options.additional });
         const indexes = await fetchCollectionIndexes(db, collName);
@@ -186,38 +271,60 @@ program
         collections: collectionsData
       };
 
+      // Stage 3: Validation
+      logInfo('\x1b[36m[3/4] 🧪 Validating blueprint...\x1b[0m');
       if (!validatePayload(payload)) {
-        console.error("Payload failed schema validation. Exiting.");
-        process.exit(1);
+        logError("Payload failed schema validation. Exiting.");
+        exitCode = 1;
+        return;
       }
+      logInfo("✅ Blueprint successfully validated against payload contract.");
+
+      // Stage 4: Submission or Saving
+      logInfo('\x1b[36m[4/4] 🚀 Submitting to server / saving file...\x1b[0m');
 
       const outPath = path.resolve(options.out);
       const jsonContent = JSON.stringify(payload, null, 2);
       fs.writeFileSync(outPath, jsonContent, 'utf-8');
+      logDebug(`Successfully saved schema payload locally to: ${outPath}`);
 
-      // Detect if --out was explicitly provided rather than defaulting
-      const outWasExplicit = process.argv.includes('--out') || process.argv.some(arg => arg.startsWith('--out='));
-
-      if (options.autoAnalyze) {
-         console.log(`\n✅ File saved to ${outPath}`);
+      if (options.server) {
+        logInfo(`📡 Submitting schema and query to server at ${options.server}...`);
+        const success = await submitToLiteServer(options.server, payload, queryObj);
+        if (!success) {
+          exitCode = 1;
+          return;
+        }
+      } else if (options.autoAnalyze) {
+         logInfo(`✅ File saved to ${outPath}`);
          const success = await autoAnalyze(outPath, options.queryFile);
          if (!success) {
-            process.exit(1);
+            exitCode = 1;
+            return;
          }
-      } else if (!options.quiet && !outWasExplicit) {
-        const stats = fs.statSync(outPath);
-        const sizeKb = stats.size / 1024;
-        await promptAndUploadMagicLink(outPath, sizeKb);
+      } else if (!options.quiet && !options.machine) {
+         // Detect if --out was explicitly provided rather than defaulting
+         const outWasExplicit = process.argv.includes('--out') || process.argv.some(arg => arg.startsWith('--out='));
+         if (!outWasExplicit) {
+           const stats = fs.statSync(outPath);
+           const sizeKb = stats.size / 1024;
+           await promptAndUploadMagicLink(outPath, sizeKb);
+         } else {
+           logInfo(`✅ File saved to ${outPath}`);
+         }
       } else {
-         console.log(`\n✅ File saved to ${outPath}`);
+         logInfo(`✅ File saved to ${outPath}`);
       }
 
     } catch (error: any) {
-      console.error("\n❌ Error:", error.message || error);
-      process.exit(1);
+      logError(`Error: ${error.message || error}`, error);
+      exitCode = 1;
     } finally {
       if (client) {
         await client.close();
+      }
+      if (exitCode !== 0) {
+        process.exit(exitCode);
       }
     }
   });

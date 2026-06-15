@@ -70,6 +70,10 @@ If you have multiple collections, this will launch an interactive prompt asking 
 | `--sanitize-pii` | Enable PII and credentials sanitization filter to drop sensitive enums (emails, passwords, SSNs, credit cards, etc.). Disabled by default. | `false` |
 | `--read-preference <mode>` | Specify read preference (e.g., `secondary`) for Replica Sets to avoid burdening the primary node. | None |
 | `--quiet` | Disable all interactive prompts and "Magic Link" upload requests. Essential for CI/CD environments. | `false` |
+| `--server <[host:]port>` | Local server address and port to send schema and query to. Requires `--query` or `--query-file`. | None |
+| `--query <string>` | Raw JSON query string to analyze. Obligatory when `--server` is specified unless `--query-file` is provided. | None |
+| `--machine` | Enable headless machine mode (suppresses terminal output, writes logs to file, silent console). | `false` |
+| `--log-file <path>` | Customize the log file path (defaults to `schema-fetch.log` if `--machine` is set). | `schema-fetch.log` |
 | `--additional` | Enable collection of advanced execution query plan cache stats (`$planCacheStats`) and latency histograms (`$collStats`). | `false` |
 | `-u, --username <username>` | MongoDB username. | None |
 | `-p, --password [password]` | MongoDB password. Will prompt securely if omitted, or fallback to environment variables `MONGODB_PASSWORD` or `MONGODB_PASS`. | None |
@@ -132,6 +136,26 @@ If documents vary wildly and the default 1000 sample isn't enough to capture all
 npx mongo-schema-fetch "mongodb://localhost:27017/myapp" \
   --collections logs \
   --sample 5000
+```
+
+**5. Connecting to a Local Docker-Based Server**
+Extract the schema and send it together with an inline query to a local server running on port 3000:
+```bash
+npx mongo-schema-fetch "mongodb://localhost:27017/myapp" \
+  --server localhost:3000 \
+  --query '{"role":"admin"}' \
+  --all-collections
+```
+
+**6. Running in Headless Machine Mode**
+Run the tool silently in automation, redirecting detailed execution logs to a custom log file while saving the JSON report to the default location:
+```bash
+npx mongo-schema-fetch "mongodb://localhost:27017/myapp" \
+  --server localhost:3000 \
+  --query '{"role":"admin"}' \
+  --all-collections \
+  --machine \
+  --log-file custom-fetch.log
 ```
 
 ---

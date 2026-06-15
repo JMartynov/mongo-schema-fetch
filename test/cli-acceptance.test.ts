@@ -26,7 +26,22 @@ describe.skipIf(process.env.SKIP_TESTCONTAINERS === 'true')('mongo-schema-fetch 
 
             beforeAll(async () => {
                 try {
-                    container = await new MongoDBContainer(version).start();
+                    let attempts = 3;
+                    while (attempts > 0) {
+                        try {
+                            container = await new MongoDBContainer(version).start();
+                            break;
+                        } catch (err: any) {
+                            attempts--;
+                            if (attempts === 0) throw err;
+                            console.warn(`⚠️ Testcontainers startup failed, retrying (${attempts} attempts left): ${err.message}`);
+                            if (container) {
+                                try { await container.stop(); } catch (e) {}
+                                container = null;
+                            }
+                            await new Promise(resolve => setTimeout(resolve, 2000));
+                        }
+                    }
                     const baseUri = container.getConnectionString();
                     uri = baseUri.includes('?') ? `${baseUri}&directConnection=true` : `${baseUri}?directConnection=true`;
 

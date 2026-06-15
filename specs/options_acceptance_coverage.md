@@ -55,6 +55,10 @@ This report evaluates which `mongo-schema-fetch` command-line options are covere
 | `--no-write-concern-j` | **YES** | Tested in `Fetch schema with negated connection options`. |
 | `--write-concern-wtimeout-ms <ms>` | **YES** | Tested in `Fetch schema from authenticated MongoDB using all extended connection options`. |
 | `--read-concern-level <level>` | **YES** | Tested in `Fetch schema from authenticated MongoDB using all extended connection options`. |
+| `--server <[host:]port>` | **YES** | Tested in `CLI connects and successfully uploads to a local server` and validation scenarios. |
+| `--query <string>` | **YES** | Tested in `CLI connects and successfully uploads to a local server` and validation scenarios. |
+| `--machine` | **YES** | Tested in `CLI runs in machine mode and writes logs to default file`. |
+| `--log-file <path>` | **YES** | Tested in `CLI runs in machine mode and writes logs to a custom file`. |
 
 ---
 
@@ -93,3 +97,20 @@ This section defines the key business rules and validation invariants for each o
 ### 8. Target Collection Resolution & Warning Invariant
 * **Invariant**: When specific collections are requested via `--collections`, any non-existent collections must be skipped with a warning, while existing collections are processed successfully.
 * **Acceptance Test**: Verified in `Fetch schema targeting a non-existent collection` by targeting `users,nonexistent` and verifying the exit code is `0`, `users` is processed, and `nonexistent` is excluded.
+
+### 9. Local Server Obligatory Query Invariant (`--server` + `--query` / `--query-file`)
+* **Invariant**: When `--server` is specified, either `--query` or `--query-file` must be provided.
+* **Acceptance Test**: Verified in `CLI fails if --server is passed without query parameters` which asserts exit code `1` and error message: `Error: --query or --query-file must be provided when using --server`.
+
+### 10. Query JSON Validation Invariant (`--query`)
+* **Invariant**: When `--query` is provided, it must contain a valid JSON string.
+* **Acceptance Test**: Verified in `CLI fails if --query has invalid JSON formatting` which asserts exit code `1` and error message: `Error: --query must be valid JSON`.
+
+### 11. Headless Machine Mode Output and Emojis Suppression (`--machine`)
+* **Invariant**: When `--machine` is enabled, all terminal styling, ASCII banners, stage indicators, and progress emojis are suppressed, resulting in completely clean stdout.
+* **Acceptance Test**: Verified in `CLI runs in machine mode and writes logs to default file` which asserts that the terminal output is completely empty on success.
+
+### 12. Headless Machine Mode File Logging (`--machine` + `--log-file`)
+* **Invariant**: Running in machine mode writes detailed, UTC-timestamped execution logs to `schema-fetch.log` by default, or a custom file specified by `--log-file`.
+* **Acceptance Test**: Verified in `CLI runs in machine mode and writes logs to default file` and `CLI runs in machine mode and writes logs to a custom file` by asserting the existence of the log files and checking their contents for UTC timestamps.
+
