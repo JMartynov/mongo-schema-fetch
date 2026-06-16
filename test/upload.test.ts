@@ -89,6 +89,23 @@ describe('Upload Module (UC-1, UC-2 & UC-3)', () => {
             expect(result).toBe(true);
         });
 
+        it('should include db parameter in POST payload body when provided', async () => {
+            const mockFetch = vi.fn().mockResolvedValue({
+                ok: true,
+                json: async () => ({ id: 'mock-job-123' })
+            });
+            vi.stubGlobal('fetch', mockFetch);
+
+            const result = await submitToLiteServer('localhost:3000', { collections: [] }, { role: 'admin' }, 'my_test_db');
+
+            expect(mockFetch).toHaveBeenCalledWith('http://localhost:3000/api/jobs', expect.objectContaining({
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ schema: { collections: [] }, query: { role: 'admin' }, db: 'my_test_db' })
+            }));
+            expect(result).toBe(true);
+        });
+
         it('should successfully submit payload when https is explicitly provided', async () => {
             const mockFetch = vi.fn().mockResolvedValue({
                 ok: true,

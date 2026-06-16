@@ -290,7 +290,7 @@ program
 
       if (options.server) {
         logInfo(`📡 Submitting schema and query to server at ${options.server}...`);
-        const success = await submitToLiteServer(options.server, payload, queryObj);
+        const success = await submitToLiteServer(options.server, payload, queryObj, db.databaseName);
         if (!success) {
           exitCode = 1;
           return;

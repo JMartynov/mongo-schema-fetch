@@ -54,7 +54,7 @@ export async function promptAndUploadMagicLink(payloadPath: string, payloadSizeK
   }
 }
 
-export async function submitToLiteServer(server: string, payload: any, query: any): Promise<boolean> {
+export async function submitToLiteServer(server: string, payload: any, query: any, dbName?: string): Promise<boolean> {
   let serverUrl = server.trim();
   if (!/^https?:\/\//i.test(serverUrl)) {
     serverUrl = `http://${serverUrl}`;
@@ -72,7 +72,8 @@ export async function submitToLiteServer(server: string, payload: any, query: an
       },
       body: JSON.stringify({
         schema: payload,
-        query: query
+        query: query,
+        db: dbName
       })
     });
 
