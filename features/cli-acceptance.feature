@@ -211,7 +211,7 @@ Feature: CLI runs against different MongoDB versions and configurations
     And the database has collection "users" with documents:
       | name  | age |
       | Alice | 30  |
-    And a query file "query-ok.json" containing "find users"
+    And a query file "query-ok.json" containing "db.users.find({ name: 'Alice' })"
     When I run mongo-schema-fetch with "--all-collections --query-file query-ok.json --auto-analyze" and quiet mode
     Then the exit code should be 0
 
@@ -220,7 +220,7 @@ Feature: CLI runs against different MongoDB versions and configurations
     And the database has collection "users" with documents:
       | name  | age |
       | Alice | 30  |
-    And a query file "query-fail.json" containing "fail_test"
+    And a query file "query-fail.json" containing "db.users.find({ name: 'fail_test' })"
     When I run mongo-schema-fetch with "--all-collections --query-file query-fail.json --auto-analyze" and quiet mode
     Then the exit code should be 1
 
@@ -296,6 +296,40 @@ Feature: CLI runs against different MongoDB versions and configurations
     Then the exit code should be 0
     And the output payload should contain collection "users"
     And the field "email" in "users" should have no enum values
+
+  Scenario: Validate wrong format connection URI fails
+    When I run mongo-schema-fetch with raw parameters "invalid-uri --all-collections"
+    Then the exit code should be 1
+    And the error output should contain "Error: Invalid MongoDB connection URI"
+
+  Scenario: Validate invalid sample size parameter fails
+    When I run mongo-schema-fetch with parameters "mongodb://localhost:27017/db --sample abc --all-collections"
+    Then the exit code should be 1
+    And the error output should contain "Error: --sample must be a positive integer"
+
+  Scenario: Validate empty query string fails
+    When I run mongo-schema-fetch with parameters "mongodb://localhost:27017/db --server localhost:3000 --query ''"
+    Then the exit code should be 1
+    And the error output should contain "Query is empty"
+
+  Scenario: Validate invalid mongosh query format fails
+    When I run mongo-schema-fetch with parameters "mongodb://localhost:27017/db --server localhost:3000 --query 'db.users.find({'"
+    Then the exit code should be 1
+    And the error output should contain "Invalid query format"
+
+  Scenario: Validate empty query file fails
+    Given a query file "query-empty.json" containing ""
+    When I run mongo-schema-fetch with parameters "mongodb://localhost:27017/db --query-file query-empty.json --all-collections"
+    Then the exit code should be 1
+    And the error output should contain "Error: Query file is empty"
+
+  Scenario: Validate valid mongosh query with BSON constructors is parsed successfully
+    Given a running MongoDB "mongo:7.0" container in "standalone" configuration
+    And the database has collection "users" with documents:
+      | name  | age |
+      | Alice | 30  |
+    When I run mongo-schema-fetch with parameters "--query 'db.users.find({ id: ObjectId(\"507f1f77bcf86cd799439011\"), date: ISODate(\"2026-06-20T23:56:37Z\") })' --all-collections"
+    Then the exit code should be 0
 
 
 

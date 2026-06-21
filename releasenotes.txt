@@ -1,6 +1,12 @@
 Release Notes - mongo-schema-fetch
 
 =========================================
+v1.4.0
+- Added support for native MongoDB Query Language (MQL) and shell (mongosh) queries.
+- Implemented robust input parameter validations (MongoDB connection URI, numeric bounds, empty queries).
+- Improved error feedback on invalid or missing command arguments.
+
+=========================================
 v1.3.0
 - Added support for local server upload.
 - Implemented inline query capabilities.

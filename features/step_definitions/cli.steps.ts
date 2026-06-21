@@ -509,6 +509,10 @@ When('I run mongo-schema-fetch with parameters {string}', (params: string) => {
   runCliCommand(`node dist/cli.js ${fullParams}`);
 });
 
+When('I run mongo-schema-fetch with raw parameters {string}', (params: string) => {
+  runCliCommand(`node dist/cli.js ${params}`);
+});
+
 Then('the error output should contain {string}', (expectedMsg: string) => {
   assert.ok(lastRunError.toLowerCase().includes(expectedMsg.toLowerCase()), `Expected error output to contain "${expectedMsg}", but got: "${lastRunError}"`);
 });

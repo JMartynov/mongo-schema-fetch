@@ -20,12 +20,11 @@ export function getCertPaths() {
 }
 
 export function generateCerts() {
-  if (fs.existsSync(certsDir)) {
+  const paths = getCertPaths();
+  if (fs.existsSync(paths.serverPem) && fs.existsSync(paths.caPem) && fs.existsSync(paths.clientPem)) {
     return;
   }
   fs.mkdirSync(certsDir, { recursive: true });
-
-  const paths = getCertPaths();
 
   try {
     // 1. Generate CA key and certificate

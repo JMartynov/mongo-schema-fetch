@@ -4,6 +4,7 @@ import { Command } from 'commander';
 import { connectToDb, fetchServerContext, getCollectionNames, fetchCollectionStats, fetchCollectionIndexes } from './db.js';
 import { inferSchema } from './schema.js';
 import { validatePayload } from './validation.js';
+import { parseQuery } from './query.js';
 import { promptForCollections } from './interactive.js';
 import { promptAndUploadMagicLink, autoAnalyze, submitToLiteServer } from './upload.js';
 import { initLogger, logInfo, logWarn, logError, logDebug } from './logger.js';
@@ -105,6 +106,53 @@ program
       logDebug(`cli arguments: ${JSON.stringify(options)}`);
 
       // 3. Validations
+      if (typeof uri !== 'string' || (!uri.startsWith('mongodb://') && !uri.startsWith('mongodb+srv://'))) {
+        logError("Error: Invalid MongoDB connection URI. Must start with \"mongodb://\" or \"mongodb+srv://\"");
+        exitCode = 1;
+        return;
+      }
+
+      const validatePositiveInteger = (val: any, name: string) => {
+        if (val !== undefined) {
+          const parsed = typeof val === 'number' ? val : parseInt(val, 10);
+          if (isNaN(parsed) || parsed <= 0 || parsed.toString() !== val.toString().trim()) {
+            throw new Error(`--${name} must be a positive integer`);
+          }
+          return parsed;
+        }
+        return undefined;
+      };
+
+      const validateNonNegativeInteger = (val: any, name: string) => {
+        if (val !== undefined) {
+          const parsed = typeof val === 'number' ? val : parseInt(val, 10);
+          if (isNaN(parsed) || parsed < 0 || parsed.toString() !== val.toString().trim()) {
+            throw new Error(`--${name} must be a non-negative integer`);
+          }
+          return parsed;
+        }
+        return undefined;
+      };
+
+      try {
+        validatePositiveInteger(options.sample, 'sample');
+        validateNonNegativeInteger(options.enumThreshold, 'enum-threshold');
+        validatePositiveInteger(options.storedValuesLimit, 'stored-values-limit');
+        validatePositiveInteger(options.distinctFieldsThreshold, 'distinct-fields-threshold');
+
+        validatePositiveInteger(options.connectTimeoutMs, 'connect-timeout-ms');
+        validatePositiveInteger(options.socketTimeoutMs, 'socket-timeout-ms');
+        validatePositiveInteger(options.serverSelectionTimeoutMs, 'server-selection-timeout-ms');
+        validatePositiveInteger(options.maxIdleTimeMs, 'max-idle-time-ms');
+        validatePositiveInteger(options.maxPoolSize, 'max-pool-size');
+        validateNonNegativeInteger(options.minPoolSize, 'min-pool-size');
+        validateNonNegativeInteger(options.writeConcernWtimeoutMs, 'write-concern-wtimeout-ms');
+      } catch (err: any) {
+        logError(`Error: ${err.message}`);
+        exitCode = 1;
+        return;
+      }
+
       if (options.autoAnalyze && !options.queryFile) {
         logError("Error: --query-file must be provided when using --auto-analyze");
         exitCode = 1;
@@ -112,7 +160,7 @@ program
       }
 
       if (options.server) {
-        if (!options.query && !options.queryFile) {
+        if (options.query === undefined && options.queryFile === undefined) {
           logError("Error: --query or --query-file must be provided when using --server");
           exitCode = 1;
           return;
@@ -120,31 +168,40 @@ program
       }
 
       let queryObj: any = null;
-      if (options.query) {
+      if (options.query !== undefined) {
         try {
-          queryObj = JSON.parse(options.query);
+          queryObj = parseQuery(options.query);
         } catch (err: any) {
-          logError("Error: --query must be valid JSON");
+          logError(`Error: --query must be valid JSON or a valid mongosh query: ${err.message}`);
           exitCode = 1;
           return;
         }
-      } else if (options.queryFile) {
+      } else if (options.queryFile !== undefined) {
         const queryPath = path.resolve(options.queryFile);
         if (!fs.existsSync(queryPath)) {
           logError(`Error: Query file not found: ${options.queryFile}`);
           exitCode = 1;
           return;
         }
-        if (options.server) {
-          try {
-            queryObj = JSON.parse(fs.readFileSync(queryPath, 'utf-8'));
-          } catch (err: any) {
-            logError(`Error: Query file does not contain valid JSON: ${err.message}`);
-            exitCode = 1;
-            return;
-          }
-        } else {
-          queryObj = fs.readFileSync(queryPath, 'utf-8');
+        let fileContent = '';
+        try {
+          fileContent = fs.readFileSync(queryPath, 'utf-8');
+        } catch (err: any) {
+          logError(`Error: Could not read query file: ${err.message}`);
+          exitCode = 1;
+          return;
+        }
+        if (!fileContent.trim()) {
+          logError("Error: Query file is empty");
+          exitCode = 1;
+          return;
+        }
+        try {
+          queryObj = parseQuery(fileContent);
+        } catch (err: any) {
+          logError(`Error: Query file does not contain valid JSON or a valid mongosh query: ${err.message}`);
+          exitCode = 1;
+          return;
         }
       }
 
