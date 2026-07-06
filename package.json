@@ -1,6 +1,6 @@
 {
   "name": "mongo-schema-fetch",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "A secure CLI tool to extract MongoDB schema blueprints without exporting real data.",
   "main": "dist/cli.js",
   "files": [
