@@ -102,6 +102,8 @@ If you have multiple collections, this will launch an interactive prompt asking 
 | `--write-concern-j`, `--no-write-concern-j` | Enable or disable journal write concern. | None |
 | `--write-concern-wtimeout-ms <ms>` | Write concern wtimeoutMS parameter in milliseconds. | None |
 | `--read-concern-level <level>` | Read concern level (e.g., `local`, `majority`, `linearizable`). | None |
+| `--hash-values` | Enable HMAC hashing of enums and query values to protect user privacy. | `false` |
+| `--percentiles` | Compute cumulative percentile stats using aggregate queries. | `false` |
 | `-h, --help` | Display help for command. | |
 
 ### Use Case Examples

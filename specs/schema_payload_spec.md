@@ -87,9 +87,15 @@ An array containing descriptors for each profiled collection. Each collection en
 {
   "stats": { ... },
   "indexes": { ... },
-  "schema": { ... }
+  "schema": { ... },
+  "percentileStats": { ... }
 }
 ```
+
+- `stats` (Object, **Required**): Storage and collection metadata.
+- `indexes` (Object, **Required**): Index definitions and usage metrics.
+- `schema` (Object, **Required**): Inferred schema blueprint.
+- `percentileStats` (Object, **Optional**): Selectivity percentages calculated for query fields (populated when `--percentiles` is active).
 
 ### 3.1. stats (Collection Statistics)
 Contains database storage and size statistics for the collection. If the `collStats` command fails due to database access privilege restrictions, the utility falls back to estimation.
@@ -418,3 +424,21 @@ Below is an annotated example of a generated `schema-payload.json` file highligh
   ]
 }
 ```
+
+---
+
+## 5. percentileStats (Selectivity Percentile Statistics)
+
+When the `--percentiles` option is enabled, the utility adds a flat `percentileStats` object to each collection payload. This maps each queried path to its calculated cumulative distribution rank (selectivity ratio):
+
+* **Key**: The queried path (e.g. `"age"`, `"address.city"`).
+* **Value**: A floating-point number between `0.0` and `1.0` representing the ratio of documents matching the selectivity condition (value $\le V$ for the operator).
+
+### Example
+```json
+"percentileStats": {
+  "age": 0.45,
+  "address.city": 0.8
+}
+```
+

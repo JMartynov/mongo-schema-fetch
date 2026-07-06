@@ -59,6 +59,8 @@ This report evaluates which `mongo-schema-fetch` command-line options are covere
 | `--query <string>` | **YES** | Tested in `CLI connects and successfully uploads to a local server` and validation scenarios. |
 | `--machine` | **YES** | Tested in `CLI runs in machine mode and writes logs to default file`. |
 | `--log-file <path>` | **YES** | Tested in `CLI runs in machine mode and writes logs to a custom file`. |
+| `--hash-values` | **YES** | Tested in `Test 2.1: Ephemeral Key Generation Check` and `Test 2.2`. |
+| `--percentiles` | **YES** | Tested in `Test 2.3: Lower-Than Selectivity Ratio ($lt)` and `Test 2.4`. |
 
 ---
 
@@ -113,4 +115,12 @@ This section defines the key business rules and validation invariants for each o
 ### 12. Headless Machine Mode File Logging (`--machine` + `--log-file`)
 * **Invariant**: Running in machine mode writes detailed, UTC-timestamped execution logs to `schema-fetch.log` by default, or a custom file specified by `--log-file`.
 * **Acceptance Test**: Verified in `CLI runs in machine mode and writes logs to default file` and `CLI runs in machine mode and writes logs to a custom file` by asserting the existence of the log files and checking their contents for UTC timestamps.
+
+### 13. HMAC-SHA256 Hashing Invariant (`--hash-values`)
+* **Invariant**: Categorical string values inside `enumValues` arrays and string query filter values must be hashed using a 256-bit ephemeral key generated per-run, and the output must be truncated to exactly 16 characters. Numbers, booleans, dates, operators, and keys are not hashed.
+* **Acceptance Test**: Verified in `Test 2.1: Ephemeral Key Generation Check` and `Test 2.2: HMAC-SHA256 Token Length`.
+
+### 14. Percentile Selectivity Calculation Invariant (`--percentiles`)
+* **Invariant**: Selectivity ratios must be calculated for query fields using `$facet` aggregate stages. Missing fields must match the lower-than conditions, and empty collections must fallback to `0.0`.
+* **Acceptance Test**: Verified in `Test 2.3` ($lt), `Test 2.4` ($gt), `Test 2.9` (missing fields), and `Test 2.10` (empty fallback).
 

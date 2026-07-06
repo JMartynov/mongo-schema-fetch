@@ -57,6 +57,19 @@ To eliminate the leakage vectors, `mongo-schema-fetch` enforces strict sanitizat
 - **Enum Length Guard**: Any string enum value exceeding **100 characters** is immediately discarded. This prevents capturing raw text blocks, descriptions, or comments that might contain sensitive remarks or secrets.
 - **Environment Scrubbing**: The system context fetched by `hostInfo` is explicitly sanitized. The `hostname` and the entire `extra` object are stripped before payload compilation.
 
+### 2.2. PII Sanitization & Masking Invariant (`--sanitize-pii`)
+* **Two-Pass Masking**: The schema pipeline dynamically executes a two-pass parser. First, a temporary schema is inferred from raw sampled documents in memory to build the set of enums and keys. Second, the raw documents are walked recursively and mapped using `maskdata` formatting rules (preserving only discovered keys and enums) before executing the final schema inference.
+* **Sensitive Format Retention**: Handled PII types preserve structure where possible:
+  * Emails are masked to `axxx.xxxx@xxxx.xxx` (preserving username subparts, dots, and domain structures).
+  * Phone numbers retain formatting and replace digits with `9` (e.g. `+1-555...` $\rightarrow$ `+9-999...`).
+  * Names preserve capital initials and mask trailing characters (e.g. `John` $\rightarrow$ `Jxxx`).
+  * Credit Cards retain the first 4 and last 4 digits (e.g., `4111-xxxx-xxxx-4444`).
+
+### 2.3. Zero-Data HMAC Hashing Invariant (`--hash-values`)
+* **Categorical Anonymization**: When `--hash-values` is active, string enum values (within the `enumValues` array of the schema) and string query filter values are hashed to prevent exposing any underlying data patterns.
+* **16-Character HMAC-SHA256**: Uses a cryptographically secure 256-bit ephemeral key generated at startup using `crypto.randomBytes(32)`. The resulting HMAC hex string is truncated to exactly 16 characters. Numeric values, dates, and comparison operators are bypassed and kept in plaintext to ensure query parsing compatibility.
+
+
 ---
 
 ## 3. Security Verification Methodology
