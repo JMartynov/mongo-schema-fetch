@@ -8,6 +8,7 @@ import { parseQuery } from './query.js';
 import { promptForCollections } from './interactive.js';
 import { promptAndUploadMagicLink, autoAnalyze, submitToLiteServer } from './upload.js';
 import { initLogger, logInfo, logWarn, logError, logDebug } from './logger.js';
+import { generateEphemeralKey, rewriteQuery, calculatePercentiles } from './sandbox.js';
 import fs from 'fs';
 import path from 'path';
 import prompts from 'prompts';
@@ -28,6 +29,8 @@ program
   .option('--stored-values-limit <number>', 'Maximum number of sample values to store per field', parseInt)
   .option('--distinct-fields-threshold <number>', 'Abort analysis if unique fields count exceeds this limit', parseInt)
   .option('--sanitize-pii', 'Enable PII and credentials sanitization filter', false)
+  .option('--hash-values', 'Enable HMAC hashing of enums and query values', false)
+  .option('--percentiles', 'Enable percentile selectivity calculations', false)
   .option('--read-preference <mode>', 'Read preference for Replica Sets (e.g. secondary)')
   .option('--quiet', 'Disable all interactive prompts (CI/CD mode)')
   .option('--query-file <path>', 'Path to a JSON file containing the query to analyze')
@@ -71,6 +74,7 @@ program
   .action(async (uri, options) => {
     let client;
     let exitCode = 0;
+    const ephemeralKey = generateEphemeralKey();
     try {
       // 1. Initialize Logger Configuration
       let logPath: string | null = null;
@@ -205,6 +209,10 @@ program
         }
       }
 
+      if (options.hashValues && queryObj) {
+        queryObj = rewriteQuery(queryObj, ephemeralKey);
+      }
+
       let password = options.password;
       if (password === undefined) {
         password = process.env.MONGODB_PASSWORD || process.env.MONGODB_PASS;
@@ -313,13 +321,20 @@ program
           options.storeValues,
           options.storedValuesLimit,
           options.distinctFieldsThreshold,
-          options.sanitizePii
+          options.sanitizePii,
+          options.hashValues,
+          ephemeralKey
         );
+
+        const percentileStats = options.percentiles && queryObj
+          ? await calculatePercentiles(db, collName, queryObj)
+          : undefined;
 
         collectionsData.push({
           stats,
           indexes,
-          schema
+          schema,
+          ...(percentileStats ? { percentileStats } : {})
         });
       }
 

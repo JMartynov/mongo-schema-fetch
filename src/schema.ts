@@ -2,6 +2,56 @@ import { Db } from 'mongodb';
 // @ts-ignore
 import mongodbSchema from 'mongodb-schema';
 import { Readable } from 'stream';
+import { maskDocument, hashValue } from './sandbox.js';
+
+function getExcludedPaths(schema: any, enumThreshold: number): Set<string> {
+  const excluded = new Set<string>();
+  function traverseSchema(obj: any) {
+    if (!obj || typeof obj !== 'object') return;
+
+    if (obj.name && obj.path) {
+      const pathStr = obj.path.join('.');
+      const isKey = obj.name === '_id' || obj.name.endsWith('_id');
+
+      let isEnum = false;
+      if (obj.types && Array.isArray(obj.types)) {
+        for (const t of obj.types) {
+          if ((t.name === 'String' || t.name === 'Number' || t.bsonType === 'String' || t.bsonType === 'Number') && t.values && Array.isArray(t.values)) {
+            if (t.values.length > 0 && t.values.length < enumThreshold) {
+              isEnum = true;
+            }
+          }
+        }
+      }
+
+      if (isKey || isEnum) {
+        excluded.add(pathStr);
+      }
+    }
+
+    if (obj.fields && Array.isArray(obj.fields)) {
+      obj.fields.forEach(traverseSchema);
+    }
+    if (obj.types && Array.isArray(obj.types)) {
+      obj.types.forEach(traverseSchema);
+    }
+  }
+  traverseSchema(schema);
+  return excluded;
+}
+
+async function getCursorDocs(cursor: any): Promise<any[]> {
+  if (cursor && typeof cursor.toArray === 'function') {
+    return await cursor.toArray();
+  }
+  const docs: any[] = [];
+  if (cursor && typeof Symbol.asyncIterator === 'symbol' && cursor[Symbol.asyncIterator]) {
+    for await (const doc of cursor) {
+      docs.push(doc);
+    }
+  }
+  return docs;
+}
 
 export async function inferSchema(
   db: Db,
@@ -12,7 +62,9 @@ export async function inferSchema(
   storeValues = false,
   storedValuesLimit?: number,
   distinctFieldsThreshold?: number,
-  sanitizePii = false
+  sanitizePii = false,
+  hashValues = false,
+  ephemeralKey?: Buffer
 ): Promise<any> {
   const coll = db.collection(collectionName);
 
@@ -40,18 +92,47 @@ export async function inferSchema(
     cursor = coll.aggregate([{ $sample: { size: limit } }], { maxTimeMS: 5000 });
   }
 
-  // mongodb-schema strictly expects a node Readable Stream
-  const readableStream = Readable.from(cursor);
-
   try {
     const parser = (mongodbSchema as any).default || mongodbSchema;
-    const schema = await parser(readableStream, {
-      semanticTypes: true,
-      storeValues,
-      storedValuesLengthLimit: storedValuesLimit,
-      distinctFieldsAbortThreshold: distinctFieldsThreshold,
-    });
-    return cleanSchema(schema, enumThreshold, sanitizePii);
+
+    if (sanitizePii) {
+      // Pass 1: Run parser on raw documents in memory
+      const sampledDocs = await getCursorDocs(cursor);
+      const stream1 = Readable.from(sampledDocs.map(d => JSON.parse(JSON.stringify(d))));
+      const tempSchema = await parser(stream1, {
+        semanticTypes: true,
+        storeValues: true,
+        distinctFieldsAbortThreshold: distinctFieldsThreshold,
+      });
+
+      if (sampledDocs.length === 0) {
+        return cleanSchema(tempSchema, enumThreshold, sanitizePii, hashValues, ephemeralKey);
+      }
+
+      const excludedPaths = getExcludedPaths(tempSchema, enumThreshold);
+
+      // Mask documents
+      const maskedDocs = sampledDocs.map(d => maskDocument(d, excludedPaths));
+
+      // Pass 2: Final inference on masked documents
+      const stream2 = Readable.from(maskedDocs);
+      const schema = await parser(stream2, {
+        semanticTypes: true,
+        storeValues,
+        storedValuesLengthLimit: storedValuesLimit,
+        distinctFieldsAbortThreshold: distinctFieldsThreshold,
+      });
+      return cleanSchema(schema, enumThreshold, sanitizePii, hashValues, ephemeralKey);
+    } else {
+      const readableStream = Readable.from(cursor);
+      const schema = await parser(readableStream, {
+        semanticTypes: true,
+        storeValues,
+        storedValuesLengthLimit: storedValuesLimit,
+        distinctFieldsAbortThreshold: distinctFieldsThreshold,
+      });
+      return cleanSchema(schema, enumThreshold, sanitizePii, hashValues, ephemeralKey);
+    }
   } catch (err: any) {
     throw err;
   }
@@ -87,7 +168,7 @@ export function isSensitiveFieldOrValue(fieldName: string, values: any[]): boole
   return false;
 }
 
-export function cleanSchema(schema: any, enumThreshold: number, sanitizePii = false): any {
+export function cleanSchema(schema: any, enumThreshold: number, sanitizePii = false, hashValues = false, ephemeralKey?: Buffer): any {
   if (!schema) return schema;
 
   // Clone to avoid mutating original
@@ -104,19 +185,24 @@ export function cleanSchema(schema: any, enumThreshold: number, sanitizePii = fa
 
       if (obj.values && Array.isArray(obj.values)) {
           // We found a values array. Check if we should save it as an enum
-          if (currentType === 'String' || currentType === 'Number') {
+          if (currentType === 'String' || currentType === 'Number' || obj.bsonType === 'String' || obj.bsonType === 'Number') {
               const uniqueValues = obj.values;
               const fieldName = (obj.path && obj.path.length > 0) ? obj.path[obj.path.length - 1] : '';
               
-              // Only save as enums if not a sensitive/PII field or value (if sanitization is enabled)
-              const isSensitive = sanitizePii && isSensitiveFieldOrValue(fieldName, uniqueValues);
+              // Only save as enums if not a sensitive/PII field or value (if sanitization is enabled and not hashing)
+              const isSensitive = sanitizePii && !hashValues && isSensitiveFieldOrValue(fieldName, uniqueValues);
               if (!isSensitive) {
                   if (uniqueValues.length > 0 && uniqueValues.length < enumThreshold) {
                       // We only keep string values if they are short (< 100 chars)
-                      const filteredValues = uniqueValues.filter((v: any) => {
+                      let filteredValues = uniqueValues.filter((v: any) => {
                           if (typeof v === 'string') return v.length <= 100;
                           return true;
                       });
+                      if (hashValues && ephemeralKey) {
+                          filteredValues = filteredValues.map((v: any) =>
+                              typeof v === 'string' ? hashValue(v, ephemeralKey) : v
+                          );
+                      }
                       if (filteredValues.length > 0) {
                           obj.enumValues = filteredValues;
                       }
